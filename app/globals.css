@@ -34,6 +34,82 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ===== Identity Workspace (Studio) design tokens ===== */
+.studio {
+  /* Spec branding constants */
+  --studio-blue: #0a2540;
+  --studio-gold: #c5a059;
+  --studio-offwhite: #f1f5f9;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+.font-display {
+  font-family: var(--font-playfair), Georgia, "Times New Roman", serif;
+}
+.font-label {
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+.font-stamp {
+  font-family: var(--font-jbmono), ui-monospace, "JetBrains Mono", monospace;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Subtle dotted backdrop behind the live card stage */
+.studio-stage {
+  background-color: #eef1f6;
+  background-image: radial-gradient(
+    rgba(10, 37, 64, 0.08) 1px,
+    transparent 1px
+  );
+  background-size: 16px 16px;
+}
+
+/* Range slider styling for the Photo Adjuster */
+.studio input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 9999px;
+  background: #e2e8f0;
+  outline: none;
+}
+.studio input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 16px;
+  width: 16px;
+  border-radius: 9999px;
+  background: var(--studio-blue);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(10, 37, 64, 0.4);
+  cursor: pointer;
+}
+.studio input[type="range"]::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: var(--studio-blue);
+  border: 2px solid #fff;
+  cursor: pointer;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #print-area,
+  #print-area * {
+    visibility: visible;
+  }
+  #print-area {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
 /* Custom scrollbar for sidebar */
 .scroll-soft::-webkit-scrollbar {
   width: 6px;

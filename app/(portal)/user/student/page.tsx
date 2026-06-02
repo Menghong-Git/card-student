@@ -1,3 +1,7 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo, useState } from "react";
 import {
   Badge,
   Button,
@@ -9,63 +13,7 @@ import {
   PageHeader,
   Select,
 } from "../../_components/ui";
-
-const STUDENTS = [
-  {
-    id: "STU-2026-01",
-    name: "Amelia Hartwell",
-    email: "amelia.h@brainbridge.edu",
-    section: "High School",
-    homeroom: "10-A",
-    grade: "Grade 10",
-    status: "Active",
-  },
-  {
-    id: "STU-2026-02",
-    name: "Noah Bennett",
-    email: "noah.b@brainbridge.edu",
-    section: "Middle School",
-    homeroom: "7-B",
-    grade: "Grade 7",
-    status: "Active",
-  },
-  {
-    id: "STU-2026-03",
-    name: "Sofia Martínez",
-    email: "sofia.m@brainbridge.edu",
-    section: "High School",
-    homeroom: "11-C",
-    grade: "Grade 11",
-    status: "Active",
-  },
-  {
-    id: "STU-2025-44",
-    name: "Liam Okafor",
-    email: "liam.o@brainbridge.edu",
-    section: "Primary School",
-    homeroom: "5-A",
-    grade: "Grade 5",
-    status: "On Leave",
-  },
-  {
-    id: "STU-2026-05",
-    name: "Hannah Lindqvist",
-    email: "hannah.l@brainbridge.edu",
-    section: "Middle School",
-    homeroom: "8-A",
-    grade: "Grade 8",
-    status: "Active",
-  },
-  {
-    id: "STU-2025-19",
-    name: "Yuki Tanaka",
-    email: "yuki.t@brainbridge.edu",
-    section: "High School",
-    homeroom: "9-B",
-    grade: "Grade 9",
-    status: "Active",
-  },
-];
+import { useStudents } from "../../_lib/store";
 
 function initials(name: string) {
   return name
@@ -78,6 +26,26 @@ function initials(name: string) {
 }
 
 export default function StudentsPage() {
+  const students = useStudents();
+  const [query, setQuery] = useState("");
+  const [section, setSection] = useState("");
+  const [grade, setGrade] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!students) return [];
+    const q = query.trim().toLowerCase();
+    return students.filter((s) => {
+      if (section && s.section !== section) return false;
+      if (grade && s.grade !== grade) return false;
+      if (!q) return true;
+      return (
+        s.name.toLowerCase().includes(q) ||
+        s.email.toLowerCase().includes(q) ||
+        s.id.toLowerCase().includes(q)
+      );
+    });
+  }, [students, query, section, grade]);
+
   return (
     <>
       <PageHeader
@@ -85,7 +53,9 @@ export default function StudentsPage() {
         description="Directory of all enrolled students at Brain Bridge School."
         actions={
           <>
-            <Button variant="secondary">Import</Button>
+            <Link href="/user/student/import">
+              <Button variant="secondary">Import</Button>
+            </Link>
             <Button>+ Add Student</Button>
           </>
         }
@@ -96,7 +66,12 @@ export default function StudentsPage() {
           <CardTitle>All Students</CardTitle>
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
-              <Input placeholder="Search students…" className="w-64 pl-9" />
+              <Input
+                placeholder="Search students…"
+                className="w-64 pl-9"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -117,7 +92,11 @@ export default function StudentsPage() {
                 />
               </svg>
             </div>
-            <Select defaultValue="" className="w-44">
+            <Select
+              value={section}
+              onChange={(e) => setSection(e.target.value)}
+              className="w-44"
+            >
               <option value="">All Sections</option>
               <option>Early Years</option>
               <option>Primary School</option>
@@ -125,7 +104,11 @@ export default function StudentsPage() {
               <option>High School</option>
               <option>International Programme</option>
             </Select>
-            <Select defaultValue="" className="w-36">
+            <Select
+              value={grade}
+              onChange={(e) => setGrade(e.target.value)}
+              className="w-36"
+            >
               <option value="">All Grades</option>
               <option>Grade 1</option>
               <option>Grade 5</option>
@@ -153,52 +136,78 @@ export default function StudentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {STUDENTS.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50/60">
-                  <td className="px-6 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-xs font-semibold">
-                        {initials(s.name)}
-                      </div>
-                      <div>
-                        <div className="font-medium leading-tight">
-                          {s.name}
-                        </div>
-                        <div className="text-[11px] text-[var(--muted)]">
-                          {s.email}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-3 font-mono text-xs text-[var(--muted)]">
-                    {s.id}
-                  </td>
-                  <td className="px-6 py-3">{s.section}</td>
-                  <td className="px-6 py-3 text-[var(--muted)]">{s.grade}</td>
-                  <td className="px-6 py-3 text-[var(--muted)]">{s.homeroom}</td>
-                  <td className="px-6 py-3">
-                    <Badge tone={s.status === "Active" ? "success" : "warning"}>
-                      {s.status}
-                    </Badge>
-                  </td>
-                  <td className="px-6 py-3 text-right">
-                    <div className="inline-flex items-center gap-1">
-                      <button className="px-2 py-1 text-xs rounded-md hover:bg-slate-100 text-[var(--primary)] font-medium">
-                        View
-                      </button>
-                      <button className="px-2 py-1 text-xs rounded-md hover:bg-slate-100">
-                        Edit
-                      </button>
-                    </div>
+              {students === null ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-6 py-10 text-center text-sm text-[var(--muted)]"
+                  >
+                    Loading students…
                   </td>
                 </tr>
-              ))}
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-6 py-10 text-center text-sm text-[var(--muted)]"
+                  >
+                    No students match the current filters.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((s) => (
+                  <tr key={s.id} className="hover:bg-slate-50/60">
+                    <td className="px-6 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-xs font-semibold">
+                          {initials(s.name)}
+                        </div>
+                        <div>
+                          <div className="font-medium leading-tight">
+                            {s.name}
+                          </div>
+                          <div className="text-[11px] text-[var(--muted)]">
+                            {s.email}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-3 font-mono text-xs text-[var(--muted)]">
+                      {s.id}
+                    </td>
+                    <td className="px-6 py-3">{s.section}</td>
+                    <td className="px-6 py-3 text-[var(--muted)]">{s.grade}</td>
+                    <td className="px-6 py-3 text-[var(--muted)]">
+                      {s.homeroom}
+                    </td>
+                    <td className="px-6 py-3">
+                      <Badge
+                        tone={s.status === "Active" ? "success" : "warning"}
+                      >
+                        {s.status}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-3 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <button className="px-2 py-1 text-xs rounded-md hover:bg-slate-100 text-[var(--primary)] font-medium">
+                          View
+                        </button>
+                        <button className="px-2 py-1 text-xs rounded-md hover:bg-slate-100">
+                          Edit
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
 
         <CardBody className="flex items-center justify-between text-xs text-[var(--muted)]">
-          <span>Showing 1 – {STUDENTS.length} of {STUDENTS.length}</span>
+          <span>
+            Showing {filtered.length} of {students?.length ?? 0}
+          </span>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" disabled>
               Previous

@@ -1,3 +1,6 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import {
   Badge,
   Button,
@@ -9,10 +12,12 @@ import {
   PageHeader,
   Select,
 } from "../../_components/ui";
+import { exportCardsAsZip, exportSingleCard } from "../../_lib/exportCards";
+import type { Student } from "../../_lib/store";
 
 type Status = "Active" | "Expired" | "Revoked" | "Pending";
 
-const CARDS: {
+type CardRow = {
   id: string;
   name: string;
   type: "Student" | "Teacher" | "Staff";
@@ -20,7 +25,9 @@ const CARDS: {
   issued: string;
   expires: string;
   status: Status;
-}[] = [
+};
+
+const CARDS: CardRow[] = [
   {
     id: "BB25-0001",
     name: "Amelia Hartwell",
@@ -93,7 +100,67 @@ const toneFor: Record<Status, "success" | "warning" | "danger" | "info"> = {
   Revoked: "danger",
 };
 
+function cardToStudent(c: CardRow): Student {
+  return {
+    id: c.id,
+    name: c.name,
+    email: "",
+    section: c.type === "Student" ? c.section.split("·")[0]?.trim() || c.section : c.section,
+    homeroom: "",
+    grade:
+      c.type === "Student"
+        ? c.section.split("·")[1]?.trim() || c.section
+        : c.type,
+    status: c.status === "Active" ? "Active" : "Inactive",
+  };
+}
+
 export default function CardListPage() {
+  const [query, setQuery] = useState("");
+  const [type, setType] = useState("");
+  const [status, setStatus] = useState("");
+  const [exportProgress, setExportProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return CARDS.filter((c) => {
+      if (type && c.type !== type) return false;
+      if (status && c.status !== status) return false;
+      if (!q) return true;
+      return (
+        c.id.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+      );
+    });
+  }, [query, type, status]);
+
+  async function handleExportAll() {
+    if (filtered.length === 0) return;
+    const stamp = new Date().toISOString().slice(0, 10);
+    setExportProgress({ done: 0, total: filtered.length });
+    try {
+      await exportCardsAsZip(
+        filtered.map(cardToStudent),
+        `cards-${stamp}.zip`,
+        (done, total) => setExportProgress({ done, total }),
+      );
+    } finally {
+      setExportProgress(null);
+    }
+  }
+
+  async function handleDownloadOne(c: CardRow) {
+    setDownloadingId(c.id);
+    try {
+      await exportSingleCard(cardToStudent(c));
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -101,7 +168,20 @@ export default function CardListPage() {
         description="All ID cards issued to students, teachers and staff."
         actions={
           <>
-            <Button variant="secondary">Export CSV</Button>
+            <Button
+              variant="secondary"
+              onClick={handleExportAll}
+              disabled={filtered.length === 0 || exportProgress !== null}
+              title={
+                filtered.length === CARDS.length
+                  ? "Export all cards as PNG (ZIP)"
+                  : `Export ${filtered.length} card${filtered.length === 1 ? "" : "s"} as PNG (ZIP)`
+              }
+            >
+              {exportProgress
+                ? `Generating ${exportProgress.done}/${exportProgress.total}…`
+                : "Export Cards (ZIP)"}
+            </Button>
             <Button>+ Issue Card</Button>
           </>
         }
@@ -115,6 +195,8 @@ export default function CardListPage() {
               <Input
                 placeholder="Search by ID or name…"
                 className="w-64 pl-9"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
               />
               <svg
                 viewBox="0 0 24 24"
@@ -136,13 +218,21 @@ export default function CardListPage() {
                 />
               </svg>
             </div>
-            <Select defaultValue="" className="w-40">
+            <Select
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              className="w-40"
+            >
               <option value="">All Types</option>
               <option>Student</option>
               <option>Teacher</option>
               <option>Staff</option>
             </Select>
-            <Select defaultValue="" className="w-40">
+            <Select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-40"
+            >
               <option value="">All Status</option>
               <option>Active</option>
               <option>Pending</option>
@@ -167,47 +257,68 @@ export default function CardListPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {CARDS.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50/60">
-                  <td className="px-6 py-3 font-mono text-xs">{c.id}</td>
-                  <td className="px-6 py-3 font-medium">{c.name}</td>
-                  <td className="px-6 py-3 text-[var(--muted)]">{c.type}</td>
-                  <td className="px-6 py-3 text-[var(--muted)]">{c.section}</td>
-                  <td className="px-6 py-3 text-[var(--muted)]">{c.issued}</td>
-                  <td className="px-6 py-3 text-[var(--muted)]">{c.expires}</td>
-                  <td className="px-6 py-3">
-                    <Badge tone={toneFor[c.status]}>{c.status}</Badge>
-                  </td>
-                  <td className="px-6 py-3 text-right">
-                    <div className="inline-flex items-center gap-1">
-                      <button
-                        type="button"
-                        className="px-2 py-1 text-xs rounded-md hover:bg-slate-100 text-[var(--primary)] font-medium"
-                      >
-                        View
-                      </button>
-                      <button
-                        type="button"
-                        className="px-2 py-1 text-xs rounded-md hover:bg-slate-100 text-[var(--foreground)]"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="px-2 py-1 text-xs rounded-md hover:bg-red-50 text-red-600"
-                      >
-                        Revoke
-                      </button>
-                    </div>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="px-6 py-10 text-center text-sm text-[var(--muted)]"
+                  >
+                    No cards match the current filters.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filtered.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-50/60">
+                    <td className="px-6 py-3 font-mono text-xs">{c.id}</td>
+                    <td className="px-6 py-3 font-medium">{c.name}</td>
+                    <td className="px-6 py-3 text-[var(--muted)]">{c.type}</td>
+                    <td className="px-6 py-3 text-[var(--muted)]">
+                      {c.section}
+                    </td>
+                    <td className="px-6 py-3 text-[var(--muted)]">
+                      {c.issued}
+                    </td>
+                    <td className="px-6 py-3 text-[var(--muted)]">
+                      {c.expires}
+                    </td>
+                    <td className="px-6 py-3">
+                      <Badge tone={toneFor[c.status]}>{c.status}</Badge>
+                    </td>
+                    <td className="px-6 py-3 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadOne(c)}
+                          disabled={downloadingId !== null}
+                          className="px-2 py-1 text-xs rounded-md hover:bg-slate-100 text-[var(--primary)] font-medium disabled:opacity-50"
+                        >
+                          {downloadingId === c.id ? "…" : "PNG"}
+                        </button>
+                        <button
+                          type="button"
+                          className="px-2 py-1 text-xs rounded-md hover:bg-slate-100 text-[var(--foreground)]"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="px-2 py-1 text-xs rounded-md hover:bg-red-50 text-red-600"
+                        >
+                          Revoke
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
 
         <CardBody className="flex items-center justify-between text-xs text-[var(--muted)]">
-          <span>Showing 1 – {CARDS.length} of {CARDS.length} cards</span>
+          <span>
+            Showing {filtered.length} of {CARDS.length} cards
+          </span>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" disabled>
               Previous

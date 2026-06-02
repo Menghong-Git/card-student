@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { useGroups } from "../_lib/store";
 
 type LeafItem = {
   label: string;
@@ -14,7 +15,7 @@ type GroupItem = {
   label: string;
   icon: React.ReactNode;
   basePath: string;
-  children: { label: string; href: string }[];
+  children: { label: string; href: string; muted?: boolean }[];
 };
 
 type NavItem = LeafItem | GroupItem;
@@ -23,96 +24,121 @@ function isGroup(item: NavItem): item is GroupItem {
   return (item as GroupItem).children !== undefined;
 }
 
-const NAV: NavItem[] = [
-  {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
-        <path
-          d="M3 12 12 4l9 8M5 10v10h14V10"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    label: "Card",
-    basePath: "/card",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
-        <rect
-          x="3"
-          y="5"
-          width="18"
-          height="14"
-          rx="2"
-          stroke="currentColor"
-          strokeWidth="1.6"
-        />
-        <path d="M3 10h18M7 15h4" stroke="currentColor" strokeWidth="1.6" />
-      </svg>
-    ),
-    children: [
-      { label: "Create Card", href: "/card/create" },
-      { label: "List Card", href: "/card/list" },
-    ],
-  },
-  {
-    label: "User",
-    basePath: "/user",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
-        <circle cx="9" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.6" />
-        <path
-          d="M3 19c.7-3.2 3.2-5 6-5s5.3 1.8 6 5"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-        <circle
-          cx="17"
-          cy="9"
-          r="2.4"
-          stroke="currentColor"
-          strokeWidth="1.6"
-        />
-        <path
-          d="M15.5 13.7c1.7.4 3.2 1.5 3.9 3.3"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-      </svg>
-    ),
-    children: [
-      { label: "Student", href: "/user/student" },
-      { label: "Teacher", href: "/user/teacher" },
-    ],
-  },
-  {
-    label: "Profile",
-    href: "/profile",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
-        <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.6" />
-        <path
-          d="M4.5 20c1.1-3.6 4-5.5 7.5-5.5S18.4 16.4 19.5 20"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-      </svg>
-    ),
-  },
-];
+const DASHBOARD_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+    <path
+      d="M3 12 12 4l9 8M5 10v10h14V10"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+const CARD_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+    <rect
+      x="3"
+      y="5"
+      width="18"
+      height="14"
+      rx="2"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    />
+    <path d="M3 10h18M7 15h4" stroke="currentColor" strokeWidth="1.6" />
+  </svg>
+);
+
+const GROUPS_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+    <circle cx="8" cy="9" r="2.6" stroke="currentColor" strokeWidth="1.6" />
+    <circle cx="16" cy="9" r="2.6" stroke="currentColor" strokeWidth="1.6" />
+    <path
+      d="M3 18c.6-2.4 2.6-3.8 5-3.8s4.4 1.4 5 3.8M13 18c.6-2.4 2.6-3.8 5-3.8s4.4 1.4 5 3.8"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+const USER_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+    <circle cx="9" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.6" />
+    <path
+      d="M3 19c.7-3.2 3.2-5 6-5s5.3 1.8 6 5"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+    <circle cx="17" cy="9" r="2.4" stroke="currentColor" strokeWidth="1.6" />
+    <path
+      d="M15.5 13.7c1.7.4 3.2 1.5 3.9 3.3"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+const PROFILE_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+    <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.6" />
+    <path
+      d="M4.5 20c1.1-3.6 4-5.5 7.5-5.5S18.4 16.4 19.5 20"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+  </svg>
+);
 
 export default function Sidebar() {
   const pathname = usePathname() || "/";
   const [mobileOpen, setMobileOpen] = useState(false);
+  const groups = useGroups();
+
+  const NAV: NavItem[] = useMemo(
+    () => [
+      { label: "Dashboard", href: "/dashboard", icon: DASHBOARD_ICON },
+      {
+        label: "Card",
+        basePath: "/card",
+        icon: CARD_ICON,
+        children: [
+          { label: "Create Card", href: "/card/create" },
+          { label: "Identity Studio", href: "/card/studio" },
+          { label: "List Card", href: "/card/list" },
+        ],
+      },
+      {
+        label: "Groups",
+        basePath: "/groups",
+        icon: GROUPS_ICON,
+        children: [
+          { label: "All Groups", href: "/groups" },
+          { label: "+ Create Group", href: "/groups/create", muted: true },
+          ...(groups ?? []).map((g) => ({
+            label: g.name,
+            href: `/groups/${g.id}`,
+          })),
+        ],
+      },
+      {
+        label: "User",
+        basePath: "/user",
+        icon: USER_ICON,
+        children: [
+          { label: "Student", href: "/user/student" },
+          { label: "Teacher", href: "/user/teacher" },
+        ],
+      },
+      { label: "Profile", href: "/profile", icon: PROFILE_ICON },
+    ],
+    [groups],
+  );
 
   const initiallyOpen = useMemo(() => {
     const open: Record<string, boolean> = {};
@@ -120,22 +146,28 @@ export default function Sidebar() {
       if (isGroup(item)) open[item.label] = pathname.startsWith(item.basePath);
     }
     return open;
-  }, [pathname]);
+  }, [pathname, NAV]);
 
   const [openGroups, setOpenGroups] =
     useState<Record<string, boolean>>(initiallyOpen);
 
   useEffect(() => {
     setOpenGroups((prev) => {
+      let changed = false;
       const next = { ...prev };
       for (const item of NAV) {
-        if (isGroup(item) && pathname.startsWith(item.basePath)) {
+        if (
+          isGroup(item) &&
+          pathname.startsWith(item.basePath) &&
+          !prev[item.label]
+        ) {
           next[item.label] = true;
+          changed = true;
         }
       }
-      return next;
+      return changed ? next : prev;
     });
-  }, [pathname]);
+  }, [pathname, NAV]);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -298,19 +330,20 @@ export default function Sidebar() {
                   >
                     <ul className="overflow-hidden pl-9 pr-2 mt-1 space-y-1">
                       {item.children.map((c) => {
-                        const active =
-                          pathname === c.href ||
-                          pathname.startsWith(c.href + "/");
+                        const active = pathname === c.href;
                         return (
                           <li key={c.href}>
                             <Link
                               href={c.href}
                               className={[
-                                "block rounded-md px-3 py-2 text-sm transition-colors",
+                                "block rounded-md px-3 py-2 text-sm transition-colors truncate",
                                 active
                                   ? "bg-white text-[var(--primary)] font-medium shadow-sm"
-                                  : "text-white/75 hover:bg-white/10 hover:text-white",
+                                  : c.muted
+                                    ? "text-white/55 hover:bg-white/10 hover:text-white italic"
+                                    : "text-white/75 hover:bg-white/10 hover:text-white",
                               ].join(" ")}
+                              title={c.label}
                             >
                               {c.label}
                             </Link>
