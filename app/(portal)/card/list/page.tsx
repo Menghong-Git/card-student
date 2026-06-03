@@ -301,11 +301,11 @@ export default function CardListPage() {
               </span>
             )}
           </CardTitle>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="relative w-full sm:w-64">
               <Input
                 placeholder="Search by ID or name…"
-                className="w-64 pl-9"
+                className="pl-9"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -329,27 +329,26 @@ export default function CardListPage() {
                 />
               </svg>
             </div>
-            <Select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="w-40"
-            >
-              <option value="">All Types</option>
-              <option>Student</option>
-              <option>Teacher</option>
-              <option>Staff</option>
-            </Select>
-            <Select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="w-40"
-            >
-              <option value="">All Status</option>
-              <option>Active</option>
-              <option>Pending</option>
-              <option>Expired</option>
-              <option>Revoked</option>
-            </Select>
+            <div className="w-full sm:w-40">
+              <Select value={type} onChange={(e) => setType(e.target.value)}>
+                <option value="">All Types</option>
+                <option>Student</option>
+                <option>Teacher</option>
+                <option>Staff</option>
+              </Select>
+            </div>
+            <div className="w-full sm:w-40">
+              <Select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option value="">All Status</option>
+                <option>Active</option>
+                <option>Pending</option>
+                <option>Expired</option>
+                <option>Revoked</option>
+              </Select>
+            </div>
           </div>
         </CardHeader>
 
