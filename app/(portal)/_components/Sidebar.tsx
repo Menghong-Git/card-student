@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useGroups } from "../_lib/store";
 
 type LeafItem = {
@@ -109,30 +109,30 @@ export default function Sidebar() {
         icon: CARD_ICON,
         children: [
           { label: "Create Card", href: "/card/create" },
-          { label: "Identity Studio", href: "/card/studio" },
+          // { label: "Identity Studio", href: "/card/studio" },
           { label: "List Card", href: "/card/list" },
         ],
       },
-      {
-        label: "Groups",
-        basePath: "/groups",
-        icon: GROUPS_ICON,
-        children: [
-          { label: "All Groups", href: "/groups" },
-          { label: "+ Create Group", href: "/groups/create", muted: true },
-          ...(groups ?? []).map((g) => ({
-            label: g.name,
-            href: `/groups/${g.id}`,
-          })),
-        ],
-      },
+      // {
+      //   label: "Groups",
+      //   basePath: "/groups",
+      //   icon: GROUPS_ICON,
+      //   children: [
+      //     { label: "All Groups", href: "/groups" },
+      //     { label: "+ Create Group", href: "/groups/create", muted: true },
+      //     ...(groups ?? []).map((g) => ({
+      //       label: g.name,
+      //       href: `/groups/${g.id}`,
+      //     })),
+      //   ],
+      // },
       {
         label: "User",
         basePath: "/user",
         icon: USER_ICON,
         children: [
           { label: "Student", href: "/user/student" },
-          { label: "Teacher", href: "/user/teacher" },
+          // { label: "Teacher", href: "/user/teacher" },
         ],
       },
       { label: "Profile", href: "/profile", icon: PROFILE_ICON },
@@ -151,7 +151,13 @@ export default function Sidebar() {
   const [openGroups, setOpenGroups] =
     useState<Record<string, boolean>>(initiallyOpen);
 
-  useEffect(() => {
+  // When the route changes, expand the group that owns it and close the
+  // mobile nav. Done during render by tracking the previous pathname —
+  // React's recommended alternative to a state-setting effect.
+  const [trackedPath, setTrackedPath] = useState(pathname);
+  if (trackedPath !== pathname) {
+    setTrackedPath(pathname);
+    setMobileOpen(false);
     setOpenGroups((prev) => {
       let changed = false;
       const next = { ...prev };
@@ -167,11 +173,7 @@ export default function Sidebar() {
       }
       return changed ? next : prev;
     });
-  }, [pathname, NAV]);
-
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
+  }
 
   const toggleGroup = (label: string) =>
     setOpenGroups((s) => ({ ...s, [label]: !s[label] }));
@@ -214,21 +216,12 @@ export default function Sidebar() {
       >
         {/* Brand */}
         <div className="px-6 py-5 flex items-center gap-3 border-b border-white/10">
-          <div className="h-10 w-10 rounded-md bg-white/10 flex items-center justify-center ring-1 ring-white/20">
-            <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
-              <path
-                d="M12 3 2 8l10 5 10-5-10-5Z"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M6 10v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinejoin="round"
-              />
-            </svg>
+          <div className="h-10 w-10 rounded-md bg-white flex items-center justify-center ring-1 ring-white/20 overflow-hidden">
+            <img
+              src="/brain-bridge-logo.png"
+              alt="Brain Bridge School"
+              className="h-full w-full object-contain"
+            />
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold tracking-wide">

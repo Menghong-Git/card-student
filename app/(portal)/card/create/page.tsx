@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Button,
   Card,
@@ -14,6 +14,15 @@ import {
   Textarea,
 } from "../../_components/ui";
 import StudentIdCard from "./_components/StudentIdCard";
+import StudentIdCardBack from "./_components/StudentIdCardBack";
+import {
+  loadFrontTemplate,
+  loadBackTemplate,
+  FRONT_SIZE,
+  BACK_SIZE,
+} from "../../_lib/templates";
+import { loadLogoDataUrl } from "../../_lib/logo";
+import { makeQrDataUrl } from "../../_lib/qr";
 
 type FormState = {
   cardType: string;
@@ -68,7 +77,37 @@ function slug(s: string) {
 export default function CreateCardPage() {
   const [data, setData] = useState<FormState>(INITIAL);
   const [downloading, setDownloading] = useState(false);
+  const [frontTpl, setFrontTpl] = useState("");
+  const [backTpl, setBackTpl] = useState("");
+  const [logo, setLogo] = useState("");
+  const [qr, setQr] = useState("");
   const svgRef = useRef<SVGSVGElement>(null);
+  const backRef = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    loadFrontTemplate()
+      .then(setFrontTpl)
+      .catch((err) => console.error(err));
+    loadBackTemplate()
+      .then(setBackTpl)
+      .catch((err) => console.error(err));
+    loadLogoDataUrl()
+      .then(setLogo)
+      .catch((err) => console.error(err));
+  }, []);
+
+  // Regenerate the QR code whenever the ID number changes.
+  useEffect(() => {
+    let active = true;
+    makeQrDataUrl(data.cardholderId)
+      .then((url) => {
+        if (active) setQr(url);
+      })
+      .catch((err) => console.error(err));
+    return () => {
+      active = false;
+    };
+  }, [data.cardholderId]);
 
   const set =
     <K extends keyof FormState>(key: K) =>
@@ -93,38 +132,60 @@ export default function CreateCardPage() {
 
   const fullName = [data.firstName, data.lastName].filter(Boolean).join(" ");
 
+  /** Rasterize a single card <svg> to an HTMLImageElement. */
+  const svgToImage = async (
+    svg: SVGSVGElement,
+    size: { w: number; h: number },
+  ): Promise<HTMLImageElement> => {
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+    // Explicit pixel size so the SVG rasterizes at a known resolution.
+    clone.setAttribute("width", String(size.w));
+    clone.setAttribute("height", String(size.h));
+    const source = new XMLSerializer().serializeToString(clone);
+    const svgBlob = new Blob([source], {
+      type: "image/svg+xml;charset=utf-8",
+    });
+    const url = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    await new Promise<void>((res, rej) => {
+      img.onload = () => res();
+      img.onerror = () => rej(new Error("Failed to load SVG"));
+      img.src = url;
+    });
+    URL.revokeObjectURL(url);
+    return img;
+  };
+
   const downloadPng = async () => {
-    const svg = svgRef.current;
-    if (!svg) return;
+    const front = svgRef.current;
+    const back = backRef.current;
+    if (!front || !back) return;
     setDownloading(true);
     try {
-      // Serialize SVG to a self-contained string
-      const clone = svg.cloneNode(true) as SVGSVGElement;
-      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-      clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
-      const source = new XMLSerializer().serializeToString(clone);
-      const svgBlob = new Blob([source], {
-        type: "image/svg+xml;charset=utf-8",
-      });
-      const url = URL.createObjectURL(svgBlob);
+      const scale = 2; // crisp print-ready PNG
+      const gap = 40 * scale; // white gutter between front and back
+      const fW = FRONT_SIZE.w * scale;
+      const fH = FRONT_SIZE.h * scale;
+      // Back has a different aspect ratio — scale it to the front's height.
+      const bH = fH;
+      const bW = Math.round((bH * BACK_SIZE.w) / BACK_SIZE.h);
 
-      const img = new Image();
-      await new Promise<void>((res, rej) => {
-        img.onload = () => res();
-        img.onerror = () => rej(new Error("Failed to load SVG"));
-        img.src = url;
-      });
+      const [frontImg, backImg] = await Promise.all([
+        svgToImage(front, { w: fW, h: fH }),
+        svgToImage(back, { w: bW, h: bH }),
+      ]);
 
-      const scale = 3; // 3× for a crisp print-ready PNG (~1620×2574)
       const canvas = document.createElement("canvas");
-      canvas.width = 540 * scale;
-      canvas.height = 858 * scale;
+      canvas.width = fW + gap + bW;
+      canvas.height = Math.max(fH, bH);
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("No canvas context");
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
+      ctx.drawImage(frontImg, 0, 0, fW, fH);
+      ctx.drawImage(backImg, fW + gap, 0, bW, bH);
 
       const blob: Blob = await new Promise((res, rej) =>
         canvas.toBlob(
@@ -150,11 +211,28 @@ export default function CreateCardPage() {
   };
 
   const downloadSvg = () => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const clone = svg.cloneNode(true) as SVGSVGElement;
-    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    const source = new XMLSerializer().serializeToString(clone);
+    const front = svgRef.current;
+    const back = backRef.current;
+    if (!front || !back) return;
+    const serialize = (svg: SVGSVGElement, size: { w: number; h: number }) => {
+      const clone = svg.cloneNode(true) as SVGSVGElement;
+      clone.setAttribute("x", "0");
+      clone.setAttribute("y", "0");
+      clone.setAttribute("width", String(size.w));
+      clone.setAttribute("height", String(size.h));
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      return new XMLSerializer().serializeToString(clone);
+    };
+    const gap = 40;
+    const h = FRONT_SIZE.h;
+    const backW = Math.round((h * BACK_SIZE.w) / BACK_SIZE.h);
+    const w = FRONT_SIZE.w + gap + backW;
+    const source =
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">` +
+      `<rect width="${w}" height="${h}" fill="#ffffff"/>` +
+      `<g transform="translate(0 0)">${serialize(front, FRONT_SIZE)}</g>` +
+      `<g transform="translate(${FRONT_SIZE.w + gap} 0)">${serialize(back, { w: backW, h })}</g>` +
+      `</svg>`;
     const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -412,11 +490,14 @@ export default function CreateCardPage() {
               <CardHeader>
                 <CardTitle>Live Card Preview</CardTitle>
                 <span className="text-[11px] text-[var(--muted)]">
-                  ID-1 portrait · 540 × 858
+                  Front &amp; back · portrait · 428 × 619
                 </span>
               </CardHeader>
-              <CardBody className="bg-slate-50 rounded-b-xl">
+              <CardBody className="bg-slate-50 rounded-b-xl space-y-5">
                 <div className="mx-auto" style={{ maxWidth: 340 }}>
+                  <p className="mb-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                    Front
+                  </p>
                   <StudentIdCard
                     ref={svgRef}
                     name={fullName || "Full Name"}
@@ -424,7 +505,16 @@ export default function CreateCardPage() {
                     grade={data.grade || "—"}
                     dob={formatDob(data.dob)}
                     photo={data.photo}
+                    template={frontTpl}
+                    logo={logo}
+                    qr={qr}
                   />
+                </div>
+                <div className="mx-auto" style={{ maxWidth: 340 }}>
+                  <p className="mb-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                    Back
+                  </p>
+                  <StudentIdCardBack ref={backRef} template={backTpl} />
                 </div>
               </CardBody>
             </Card>
@@ -448,8 +538,8 @@ export default function CreateCardPage() {
               </Button>
             </div>
             <p className="text-[11px] text-[var(--muted)] text-center">
-              PNG is exported at 3× resolution (1620 × 2574 px) — ready for
-              print at ISO 7810 ID-1 portrait.
+              Export includes both the front and back side by side, at 3×
+              resolution (1284 × 1857 px) — print-ready.
             </p>
           </div>
         </div>

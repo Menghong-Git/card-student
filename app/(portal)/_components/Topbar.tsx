@@ -59,7 +59,7 @@ export default function Topbar() {
         </div>
 
         <div className="ml-auto flex items-center gap-3">
-          <div className="relative hidden md:block">
+          {/* <div className="relative hidden md:block">
             <input
               type="search"
               placeholder="Search students, teachers, cards…"
@@ -84,9 +84,9 @@ export default function Topbar() {
                 strokeLinecap="round"
               />
             </svg>
-          </div>
+          </div> */}
 
-          <button
+          {/* <button
             type="button"
             aria-label="Notifications"
             className="relative h-9 w-9 rounded-md border border-[var(--border)] bg-white hover:bg-slate-50"
@@ -110,7 +110,7 @@ export default function Topbar() {
               />
             </svg>
             <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-[var(--accent)]" />
-          </button>
+          </button> */}
 
           <div className="hidden sm:flex items-center gap-2 h-9 pl-2 pr-3 rounded-md border border-[var(--border)] bg-white">
             <div className="h-7 w-7 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-xs font-semibold">
