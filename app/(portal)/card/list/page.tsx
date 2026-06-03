@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Badge,
   Button,
@@ -13,87 +13,20 @@ import {
   Select,
 } from "../../_components/ui";
 import { exportCardsAsZip, exportSingleCard } from "../../_lib/exportCards";
-import type { Student } from "../../_lib/store";
+import {
+  useCards,
+  addCards,
+  type CardRow,
+  type CardStatus,
+  type Student,
+} from "../../_lib/store";
+import {
+  parseCardFile,
+  downloadCsvTemplate,
+  downloadXlsxTemplate,
+} from "../../_lib/cardCsv";
 
-type Status = "Active" | "Expired" | "Revoked" | "Pending";
-
-type CardRow = {
-  id: string;
-  name: string;
-  type: "Student" | "Teacher" | "Staff";
-  section: string;
-  issued: string;
-  expires: string;
-  status: Status;
-};
-
-const CARDS: CardRow[] = [
-  {
-    id: "BB25-0001",
-    name: "Amelia Hartwell",
-    type: "Student",
-    section: "High School · Grade 10",
-    issued: "2025-09-12",
-    expires: "2026-09-12",
-    status: "Active",
-  },
-  {
-    id: "BB25-0002",
-    name: "Noah Bennett",
-    type: "Student",
-    section: "Middle School · Grade 7",
-    issued: "2025-09-14",
-    expires: "2026-09-14",
-    status: "Active",
-  },
-  {
-    id: "BB25-T021",
-    name: "Ms. Priya Raman",
-    type: "Teacher",
-    section: "Sciences",
-    issued: "2025-08-02",
-    expires: "2026-08-02",
-    status: "Active",
-  },
-  {
-    id: "BB24-0881",
-    name: "Liam Okafor",
-    type: "Student",
-    section: "Primary School · Grade 5",
-    issued: "2024-09-15",
-    expires: "2025-09-15",
-    status: "Revoked",
-  },
-  {
-    id: "BB25-0003",
-    name: "Sofia Martínez",
-    type: "Student",
-    section: "High School · Grade 11",
-    issued: "2025-09-01",
-    expires: "2026-09-01",
-    status: "Pending",
-  },
-  {
-    id: "BB24-T088",
-    name: "Mr. Kenji Watanabe",
-    type: "Teacher",
-    section: "Mathematics",
-    issued: "2024-08-20",
-    expires: "2025-08-20",
-    status: "Expired",
-  },
-  {
-    id: "BB25-0004",
-    name: "Hannah Lindqvist",
-    type: "Student",
-    section: "Middle School · Grade 8",
-    issued: "2025-09-18",
-    expires: "2026-09-18",
-    status: "Active",
-  },
-];
-
-const toneFor: Record<Status, "success" | "warning" | "danger" | "info"> = {
+const toneFor: Record<CardStatus, "success" | "warning" | "danger" | "info"> = {
   Active: "success",
   Pending: "info",
   Expired: "warning",
@@ -105,29 +38,38 @@ function cardToStudent(c: CardRow): Student {
     id: c.id,
     name: c.name,
     email: "",
-    section: c.type === "Student" ? c.section.split("·")[0]?.trim() || c.section : c.section,
+    section: c.section,
     homeroom: "",
-    grade:
-      c.type === "Student"
-        ? c.section.split("·")[1]?.trim() || c.section
-        : c.type,
+    grade: c.grade || c.type,
     status: c.status === "Active" ? "Active" : "Inactive",
+    dob: c.dob,
   };
 }
 
+type ImportResult = {
+  added: number;
+  updated: number;
+  errors: string[];
+} | null;
+
 export default function CardListPage() {
+  const cards = useCards();
   const [query, setQuery] = useState("");
   const [type, setType] = useState("");
   const [status, setStatus] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [exportProgress, setExportProgress] = useState<{
     done: number;
     total: number;
   } | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return CARDS.filter((c) => {
+    return (cards ?? []).filter((c) => {
       if (type && c.type !== type) return false;
       if (status && c.status !== status) return false;
       if (!q) return true;
@@ -135,15 +77,77 @@ export default function CardListPage() {
         c.id.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
       );
     });
-  }, [query, type, status]);
+  }, [cards, query, type, status]);
 
-  async function handleExportAll() {
-    if (filtered.length === 0) return;
+  const totalCount = cards?.length ?? 0;
+
+  const selectedInView = filtered.filter((c) => selected.has(c.id));
+  const allSelected =
+    filtered.length > 0 && selectedInView.length === filtered.length;
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        filtered.forEach((c) => next.delete(c.id));
+      } else {
+        filtered.forEach((c) => next.add(c.id));
+      }
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImporting(true);
+      setImportResult(null);
+      try {
+        const { rows, errors } = await parseCardFile(file);
+        if (rows.length > 0) {
+          const { added, updated } = addCards(rows);
+          setImportResult({ added, updated, errors });
+        } else {
+          setImportResult({ added: 0, updated: 0, errors });
+        }
+      } catch (err) {
+        setImportResult({
+          added: 0,
+          updated: 0,
+          errors: [
+            `Could not read the file: ${err instanceof Error ? err.message : String(err)}`,
+          ],
+        });
+      } finally {
+        setImporting(false);
+      }
+    }
+    // Reset so re-selecting the same file fires change again.
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  const exportList = selected.size > 0 ? selectedInView : filtered;
+
+  async function handleExport() {
+    if (exportList.length === 0) return;
     const stamp = new Date().toISOString().slice(0, 10);
-    setExportProgress({ done: 0, total: filtered.length });
+    setExportProgress({ done: 0, total: exportList.length });
     try {
       await exportCardsAsZip(
-        filtered.map(cardToStudent),
+        exportList.map(cardToStudent),
         `cards-${stamp}.zip`,
         (done, total) => setExportProgress({ done, total }),
       );
@@ -161,35 +165,128 @@ export default function CardListPage() {
     }
   }
 
+  const exportLabel = exportProgress
+    ? `Generating ${exportProgress.done}/${exportProgress.total}…`
+    : selected.size > 0
+      ? `Export Selected (${selectedInView.length})`
+      : "Export All (ZIP)";
+
   return (
     <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,.xlsx,.xls,text/csv"
+        className="hidden"
+        onChange={handleImportFile}
+      />
       <PageHeader
         title="Card List"
-        description="All ID cards issued to students, teachers and staff."
+        description="All ID cards issued to students, teachers and staff. Import from CSV/Excel — one row per card."
         actions={
           <>
             <Button
               variant="secondary"
-              onClick={handleExportAll}
-              disabled={filtered.length === 0 || exportProgress !== null}
+              onClick={() => fileRef.current?.click()}
+              disabled={importing}
+            >
+              {importing ? "Importing…" : "Import CSV / Excel"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleExport}
+              disabled={exportList.length === 0 || exportProgress !== null}
               title={
-                filtered.length === CARDS.length
-                  ? "Export all cards as PNG (ZIP)"
-                  : `Export ${filtered.length} card${filtered.length === 1 ? "" : "s"} as PNG (ZIP)`
+                selected.size > 0
+                  ? `Export ${selectedInView.length} selected card(s)`
+                  : `Export all ${filtered.length} card(s) in view`
               }
             >
-              {exportProgress
-                ? `Generating ${exportProgress.done}/${exportProgress.total}…`
-                : "Export Cards (ZIP)"}
+              {exportLabel}
             </Button>
             <Button>+ Issue Card</Button>
           </>
         }
       />
 
+      {/* Import help / template downloads */}
+      <Card className="mb-4">
+        <CardBody className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <div className="text-[var(--muted)]">
+            <span className="font-medium text-[var(--foreground)]">
+              Bulk import:
+            </span>{" "}
+            download a template, fill one row per student card, then use{" "}
+            <span className="font-medium">Import CSV / Excel</span>.
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={downloadCsvTemplate}>
+              ↓ CSV template
+            </Button>
+            <Button variant="ghost" size="sm" onClick={downloadXlsxTemplate}>
+              ↓ Excel template
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+
+      {importResult && (
+        <div
+          className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+            importResult.added + importResult.updated > 0
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-amber-200 bg-amber-50 text-amber-800"
+          }`}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <span>
+              {importResult.added + importResult.updated > 0
+                ? `Imported ${importResult.added} new card(s)` +
+                  (importResult.updated
+                    ? ` and updated ${importResult.updated}.`
+                    : ".")
+                : "No cards were imported."}
+              {importResult.errors.length > 0 &&
+                ` ${importResult.errors.length} row(s) skipped.`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setImportResult(null)}
+              className="text-xs underline opacity-70 hover:opacity-100"
+            >
+              Dismiss
+            </button>
+          </div>
+          {importResult.errors.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 text-xs">
+              {importResult.errors.slice(0, 6).map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+              {importResult.errors.length > 6 && (
+                <li>…and {importResult.errors.length - 6} more.</li>
+              )}
+            </ul>
+          )}
+        </div>
+      )}
+
       <Card>
         <CardHeader className="flex-wrap">
-          <CardTitle>All Cards</CardTitle>
+          <CardTitle>
+            All Cards
+            {selected.size > 0 && (
+              <span className="ml-2 text-xs font-normal text-[var(--muted)]">
+                · {selected.size} selected ·{" "}
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="underline hover:text-[var(--foreground)]"
+                >
+                  clear
+                </button>
+              </span>
+            )}
+          </CardTitle>
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
               <Input
@@ -246,6 +343,16 @@ export default function CardListPage() {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-[var(--muted)] text-[11px] uppercase tracking-wider">
               <tr>
+                <th className="w-10 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    disabled={filtered.length === 0}
+                    className="h-4 w-4 cursor-pointer accent-[var(--primary)]"
+                  />
+                </th>
                 <th className="text-left font-semibold px-6 py-3">Card ID</th>
                 <th className="text-left font-semibold px-6 py-3">Holder</th>
                 <th className="text-left font-semibold px-6 py-3">Type</th>
@@ -257,10 +364,19 @@ export default function CardListPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {filtered.length === 0 ? (
+              {cards === null ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
+                    className="px-6 py-10 text-center text-sm text-[var(--muted)]"
+                  >
+                    Loading cards…
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={9}
                     className="px-6 py-10 text-center text-sm text-[var(--muted)]"
                   >
                     No cards match the current filters.
@@ -268,12 +384,28 @@ export default function CardListPage() {
                 </tr>
               ) : (
                 filtered.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50/60">
+                  <tr
+                    key={c.id}
+                    className={
+                      selected.has(c.id)
+                        ? "bg-[var(--primary)]/5"
+                        : "hover:bg-slate-50/60"
+                    }
+                  >
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${c.id}`}
+                        checked={selected.has(c.id)}
+                        onChange={() => toggleOne(c.id)}
+                        className="h-4 w-4 cursor-pointer accent-[var(--primary)]"
+                      />
+                    </td>
                     <td className="px-6 py-3 font-mono text-xs">{c.id}</td>
                     <td className="px-6 py-3 font-medium">{c.name}</td>
                     <td className="px-6 py-3 text-[var(--muted)]">{c.type}</td>
                     <td className="px-6 py-3 text-[var(--muted)]">
-                      {c.section}
+                      {[c.section, c.grade].filter(Boolean).join(" · ")}
                     </td>
                     <td className="px-6 py-3 text-[var(--muted)]">
                       {c.issued}
@@ -317,7 +449,7 @@ export default function CardListPage() {
 
         <CardBody className="flex items-center justify-between text-xs text-[var(--muted)]">
           <span>
-            Showing {filtered.length} of {CARDS.length} cards
+            Showing {filtered.length} of {totalCount} cards
           </span>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" disabled>

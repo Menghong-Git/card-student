@@ -31,6 +31,14 @@ function exportSizes(): { front: Size; back: Size; gap: number } {
   };
 }
 
+/** Render a DOB for the card: ISO (yyyy-mm-dd) → "MM / DD / YYYY", else as-is. */
+function formatDob(value: string | undefined): string {
+  const d = (value ?? "").trim();
+  if (!d) return "—";
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[2]} / ${m[3]} / ${m[1]}` : d;
+}
+
 function studentToCardData(
   s: Student,
   template: string,
@@ -41,7 +49,7 @@ function studentToCardData(
     name: s.name,
     id: s.id,
     grade: s.grade,
-    dob: s.dob && s.dob.trim() ? s.dob : "—",
+    dob: formatDob(s.dob),
     photo: "",
     template,
     logo,

@@ -13,6 +13,22 @@ export type Student = {
   dob?: string;
 };
 
+export type CardType = "Student" | "Teacher" | "Staff";
+export type CardStatus = "Active" | "Expired" | "Revoked" | "Pending";
+
+/** One issued ID card = one row in the Card List (and one CSV/Excel row). */
+export type CardRow = {
+  id: string;
+  name: string;
+  type: CardType;
+  section: string;
+  grade: string;
+  dob: string;
+  issued: string;
+  expires: string;
+  status: CardStatus;
+};
+
 export type Group = {
   id: string;
   name: string;
@@ -52,6 +68,7 @@ export type IdRecord = {
 const STUDENTS_KEY = "bb.students.v1";
 const GROUPS_KEY = "bb.groups.v1";
 const ID_RECORDS_KEY = "bb.idcards.v1";
+const CARDS_KEY = "bb.cards.v1";
 
 const SEED_STUDENTS: Student[] = [
   {
@@ -110,6 +127,86 @@ const SEED_STUDENTS: Student[] = [
   },
 ];
 
+const SEED_CARDS: CardRow[] = [
+  {
+    id: "BB25-0001",
+    name: "Amelia Hartwell",
+    type: "Student",
+    section: "High School",
+    grade: "Grade 10",
+    dob: "2009-04-12",
+    issued: "2025-09-12",
+    expires: "2026-09-12",
+    status: "Active",
+  },
+  {
+    id: "BB25-0002",
+    name: "Noah Bennett",
+    type: "Student",
+    section: "Middle School",
+    grade: "Grade 7",
+    dob: "2012-06-03",
+    issued: "2025-09-14",
+    expires: "2026-09-14",
+    status: "Active",
+  },
+  {
+    id: "BB25-T021",
+    name: "Ms. Priya Raman",
+    type: "Teacher",
+    section: "Sciences",
+    grade: "",
+    dob: "",
+    issued: "2025-08-02",
+    expires: "2026-08-02",
+    status: "Active",
+  },
+  {
+    id: "BB24-0881",
+    name: "Liam Okafor",
+    type: "Student",
+    section: "Primary School",
+    grade: "Grade 5",
+    dob: "2014-01-20",
+    issued: "2024-09-15",
+    expires: "2025-09-15",
+    status: "Revoked",
+  },
+  {
+    id: "BB25-0003",
+    name: "Sofia Martínez",
+    type: "Student",
+    section: "High School",
+    grade: "Grade 11",
+    dob: "2008-11-09",
+    issued: "2025-09-01",
+    expires: "2026-09-01",
+    status: "Pending",
+  },
+  {
+    id: "BB24-T088",
+    name: "Mr. Kenji Watanabe",
+    type: "Teacher",
+    section: "Mathematics",
+    grade: "",
+    dob: "",
+    issued: "2024-08-20",
+    expires: "2025-08-20",
+    status: "Expired",
+  },
+  {
+    id: "BB25-0004",
+    name: "Hannah Lindqvist",
+    type: "Student",
+    section: "Middle School",
+    grade: "Grade 8",
+    dob: "2011-07-22",
+    issued: "2025-09-18",
+    expires: "2026-09-18",
+    status: "Active",
+  },
+];
+
 const listeners = new Set<() => void>();
 function emit() {
   for (const l of listeners) l();
@@ -148,6 +245,9 @@ function ensureSeeded() {
   if (window.localStorage.getItem(ID_RECORDS_KEY) === null) {
     writeJSON(ID_RECORDS_KEY, [] as IdRecord[]);
   }
+  if (window.localStorage.getItem(CARDS_KEY) === null) {
+    writeJSON(CARDS_KEY, SEED_CARDS);
+  }
 }
 
 export function getStudents(): Student[] {
@@ -165,6 +265,57 @@ export function addStudents(rows: Student[]) {
   const byId = new Map(current.map((s) => [s.id, s]));
   for (const r of rows) byId.set(r.id, r);
   setStudents(Array.from(byId.values()));
+}
+
+export function getCards(): CardRow[] {
+  ensureSeeded();
+  return readJSON<CardRow[]>(CARDS_KEY, SEED_CARDS);
+}
+
+export function setCards(next: CardRow[]) {
+  writeJSON(CARDS_KEY, next);
+  emit();
+}
+
+/** Upsert imported rows by card id (case-insensitive); new ids go to the top. */
+export function addCards(rows: CardRow[]): { added: number; updated: number } {
+  const current = getCards();
+  const indexById = new Map(
+    current.map((c, i) => [c.id.trim().toLowerCase(), i]),
+  );
+  const next = current.slice();
+  let added = 0;
+  let updated = 0;
+  const prepend: CardRow[] = [];
+  for (const row of rows) {
+    const key = row.id.trim().toLowerCase();
+    const idx = indexById.get(key);
+    if (idx === undefined) {
+      prepend.push(row);
+      indexById.set(key, -1);
+      added++;
+    } else if (idx >= 0) {
+      next[idx] = row;
+      updated++;
+    }
+  }
+  setCards([...prepend, ...next]);
+  return { added, updated };
+}
+
+export function useCards(): CardRow[] | null {
+  // useSyncExternalStore already returns the server snapshot (null) during SSR
+  // and the first client paint, then re-renders with the live value — so no
+  // separate "hydrated" effect is needed to avoid a hydration mismatch.
+  const snapshot = useSyncExternalStore(
+    subscribe,
+    () =>
+      typeof window === "undefined"
+        ? null
+        : window.localStorage.getItem(CARDS_KEY),
+    () => null,
+  );
+  return useMemo(() => (snapshot === null ? null : getCards()), [snapshot]);
 }
 
 export function getGroups(): Group[] {
