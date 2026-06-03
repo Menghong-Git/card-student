@@ -11,7 +11,7 @@ import StudentIdCardBack, {
   type StudentIdCardBackData,
 } from "../card/create/_components/StudentIdCardBack";
 import { loadFrontTemplate, loadBackTemplate, FRONT_SIZE, BACK_SIZE } from "./templates";
-import { loadLogoDataUrl } from "./logo";
+import { loadLogoDataUrl, loadImageDataUrl } from "./logo";
 import { makeQrDataUrl } from "./qr";
 import type { Student } from "./store";
 
@@ -39,18 +39,32 @@ function formatDob(value: string | undefined): string {
   return m ? `${m[2]} / ${m[3]} / ${m[1]}` : d;
 }
 
+/** Resolve a photo (data URI or URL) to an embeddable data URI; the export
+ *  rasterizer can't load external URLs, so URLs are fetched + inlined. */
+async function resolvePhoto(raw: string | undefined): Promise<string> {
+  const p = (raw ?? "").trim();
+  if (!p) return "";
+  if (p.startsWith("data:")) return p;
+  try {
+    return await loadImageDataUrl(p);
+  } catch {
+    return ""; // fall back to the card's photo placeholder
+  }
+}
+
 function studentToCardData(
   s: Student,
   template: string,
   logo: string,
   qr: string,
+  photo: string,
 ): StudentIdCardData {
   return {
     name: s.name,
     id: s.id,
     grade: s.grade,
     dob: formatDob(s.dob),
-    photo: "",
+    photo,
     template,
     logo,
     qr,
@@ -163,17 +177,18 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 export async function renderCardPng(student: Student): Promise<Blob> {
-  const [frontTemplate, backTemplate, logo, qr] = await Promise.all([
+  const [frontTemplate, backTemplate, logo, qr, photo] = await Promise.all([
     loadFrontTemplate(),
     loadBackTemplate(),
     loadLogoDataUrl(),
     makeQrDataUrl(student.id),
+    resolvePhoto(student.photo),
   ]);
   const sizes = exportSizes();
   const [front, back] = await Promise.all([
     renderCardSvg(
       StudentIdCard,
-      studentToCardData(student, frontTemplate, logo, qr),
+      studentToCardData(student, frontTemplate, logo, qr, photo),
       sizes.front,
     ),
     renderCardSvg(StudentIdCardBack, studentToBackData(backTemplate), sizes.back),

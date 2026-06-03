@@ -24,7 +24,7 @@ type ParsedRow = {
   rowIndex: number;
 };
 
-const COLUMN_ALIASES: Record<keyof Student, string[]> = {
+const COLUMN_ALIASES: Record<Exclude<keyof Student, "photo">, string[]> = {
   id: ["id", "student id", "studentid", "student_id"],
   name: ["name", "full name", "student name", "fullname"],
   email: ["email", "e-mail", "mail"],

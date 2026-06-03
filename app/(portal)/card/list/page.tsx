@@ -16,6 +16,7 @@ import { exportCardsAsZip, exportSingleCard } from "../../_lib/exportCards";
 import {
   useCards,
   addCards,
+  deleteCard,
   type CardRow,
   type CardStatus,
   type Student,
@@ -43,6 +44,7 @@ function cardToStudent(c: CardRow): Student {
     grade: c.grade || c.type,
     status: c.status === "Active" ? "Active" : "Inactive",
     dob: c.dob,
+    photo: c.image,
   };
 }
 
@@ -154,6 +156,18 @@ export default function CardListPage() {
     } finally {
       setExportProgress(null);
     }
+  }
+
+  function handleDelete(c: CardRow) {
+    if (!window.confirm(`Delete card ${c.id} (${c.name})? This cannot be undone.`))
+      return;
+    deleteCard(c.id);
+    setSelected((prev) => {
+      if (!prev.has(c.id)) return prev;
+      const next = new Set(prev);
+      next.delete(c.id);
+      return next;
+    });
   }
 
   async function handleDownloadOne(c: CardRow) {
@@ -354,10 +368,10 @@ export default function CardListPage() {
                   />
                 </th>
                 <th className="text-left font-semibold px-6 py-3">Card ID</th>
-                <th className="text-left font-semibold px-6 py-3">Holder</th>
+                <th className="text-left font-semibold px-6 py-3">Name</th>
                 <th className="text-left font-semibold px-6 py-3">Type</th>
                 <th className="text-left font-semibold px-6 py-3">Section</th>
-                <th className="text-left font-semibold px-6 py-3">Issued</th>
+                <th className="text-left font-semibold px-6 py-3">Intake</th>
                 <th className="text-left font-semibold px-6 py-3">Expires</th>
                 <th className="text-left font-semibold px-6 py-3">Status</th>
                 <th className="text-right font-semibold px-6 py-3">Actions</th>
@@ -402,7 +416,29 @@ export default function CardListPage() {
                       />
                     </td>
                     <td className="px-6 py-3 font-mono text-xs">{c.id}</td>
-                    <td className="px-6 py-3 font-medium">{c.name}</td>
+                    <td className="px-6 py-3 font-medium">
+                      <div className="flex items-center gap-2.5">
+                        {c.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={c.image}
+                            alt=""
+                            className="h-8 w-8 rounded-full object-cover border border-[var(--border)] bg-slate-100"
+                          />
+                        ) : (
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-[10px] font-semibold text-slate-500">
+                            {c.name
+                              .split(" ")
+                              .map((p) => p[0])
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .join("")
+                              .toUpperCase()}
+                          </span>
+                        )}
+                        <span>{c.name}</span>
+                      </div>
+                    </td>
                     <td className="px-6 py-3 text-[var(--muted)]">{c.type}</td>
                     <td className="px-6 py-3 text-[var(--muted)]">
                       {[c.section, c.grade].filter(Boolean).join(" · ")}
@@ -434,9 +470,10 @@ export default function CardListPage() {
                         </button>
                         <button
                           type="button"
+                          onClick={() => handleDelete(c)}
                           className="px-2 py-1 text-xs rounded-md hover:bg-red-50 text-red-600"
                         >
-                          Revoke
+                          Delete
                         </button>
                       </div>
                     </td>

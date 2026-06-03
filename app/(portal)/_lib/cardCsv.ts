@@ -16,12 +16,14 @@ export const CARD_HEADERS = [
   "section",
   "grade",
   "dob",
-  "issued",
+  "image",
+  "intake",
   "expires",
   "status",
 ] as const;
 
-/** Two filled-in example rows so the template shows the expected shape. */
+/** Two filled-in example rows so the template shows the expected shape.
+ *  `image` accepts a URL or a data URI (leave blank for none). */
 const EXAMPLE_ROWS: string[][] = [
   [
     "BB25-0101",
@@ -30,6 +32,7 @@ const EXAMPLE_ROWS: string[][] = [
     "High School",
     "Grade 10",
     "2009-05-14",
+    "https://example.com/photos/emma.jpg",
     "2025-09-01",
     "2026-09-01",
     "Active",
@@ -41,6 +44,7 @@ const EXAMPLE_ROWS: string[][] = [
     "Middle School",
     "Grade 7",
     "2012-03-22",
+    "",
     "2025-09-01",
     "2026-09-01",
     "Active",
@@ -224,7 +228,8 @@ export async function parseCardFile(file: File): Promise<ParseResult> {
       section: get("section"),
       grade: get("grade"),
       dob: get("dob", "date of birth", "birthdate"),
-      issued: get("issued", "issue date", "issued on"),
+      image: get("image", "photo", "image url", "photo url", "picture"),
+      issued: get("intake", "issued", "intake date", "issue date", "issued on"),
       expires: get("expires", "expiry", "expiration", "expiry date"),
       status: normalizeStatus(get("status")),
     });

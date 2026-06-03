@@ -11,6 +11,8 @@ export type Student = {
   grade: string;
   status: "Active" | "On Leave" | "Inactive";
   dob?: string;
+  /** Profile photo — data URI or URL (used as the card photo on export). */
+  photo?: string;
 };
 
 export type CardType = "Student" | "Teacher" | "Staff";
@@ -24,6 +26,8 @@ export type CardRow = {
   section: string;
   grade: string;
   dob: string;
+  /** Profile image — data URI or URL. Used as the card photo on export. */
+  image: string;
   issued: string;
   expires: string;
   status: CardStatus;
@@ -135,6 +139,7 @@ const SEED_CARDS: CardRow[] = [
     section: "High School",
     grade: "Grade 10",
     dob: "2009-04-12",
+    image: "",
     issued: "2025-09-12",
     expires: "2026-09-12",
     status: "Active",
@@ -146,6 +151,7 @@ const SEED_CARDS: CardRow[] = [
     section: "Middle School",
     grade: "Grade 7",
     dob: "2012-06-03",
+    image: "",
     issued: "2025-09-14",
     expires: "2026-09-14",
     status: "Active",
@@ -157,6 +163,7 @@ const SEED_CARDS: CardRow[] = [
     section: "Sciences",
     grade: "",
     dob: "",
+    image: "",
     issued: "2025-08-02",
     expires: "2026-08-02",
     status: "Active",
@@ -168,6 +175,7 @@ const SEED_CARDS: CardRow[] = [
     section: "Primary School",
     grade: "Grade 5",
     dob: "2014-01-20",
+    image: "",
     issued: "2024-09-15",
     expires: "2025-09-15",
     status: "Revoked",
@@ -179,6 +187,7 @@ const SEED_CARDS: CardRow[] = [
     section: "High School",
     grade: "Grade 11",
     dob: "2008-11-09",
+    image: "",
     issued: "2025-09-01",
     expires: "2026-09-01",
     status: "Pending",
@@ -190,6 +199,7 @@ const SEED_CARDS: CardRow[] = [
     section: "Mathematics",
     grade: "",
     dob: "",
+    image: "",
     issued: "2024-08-20",
     expires: "2025-08-20",
     status: "Expired",
@@ -201,6 +211,7 @@ const SEED_CARDS: CardRow[] = [
     section: "Middle School",
     grade: "Grade 8",
     dob: "2011-07-22",
+    image: "",
     issued: "2025-09-18",
     expires: "2026-09-18",
     status: "Active",
@@ -301,6 +312,10 @@ export function addCards(rows: CardRow[]): { added: number; updated: number } {
   }
   setCards([...prepend, ...next]);
   return { added, updated };
+}
+
+export function deleteCard(id: string) {
+  setCards(getCards().filter((c) => c.id !== id));
 }
 
 export function useCards(): CardRow[] | null {

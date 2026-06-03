@@ -126,15 +126,15 @@ export default function Sidebar() {
       //     })),
       //   ],
       // },
-      {
-        label: "User",
-        basePath: "/user",
-        icon: USER_ICON,
-        children: [
-          { label: "Student", href: "/user/student" },
-          // { label: "Teacher", href: "/user/teacher" },
-        ],
-      },
+      // {
+      //   label: "User",
+      //   basePath: "/user",
+      //   icon: USER_ICON,
+      //   children: [
+      //     { label: "Student", href: "/user/student" },
+      //     // { label: "Teacher", href: "/user/teacher" },
+      //   ],
+      // },
       { label: "Profile", href: "/profile", icon: PROFILE_ICON },
     ],
     [groups],
