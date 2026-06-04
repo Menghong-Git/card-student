@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import {
   Badge,
@@ -38,7 +39,7 @@ function cardToStudent(c: CardRow): Student {
   return {
     id: c.id,
     name: c.name,
-    email: "",
+    email: c.email,
     section: c.section,
     homeroom: "",
     grade: c.grade || c.type,
@@ -76,7 +77,9 @@ export default function CardListPage() {
       if (status && c.status !== status) return false;
       if (!q) return true;
       return (
-        c.id.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+        c.id.toLowerCase().includes(q) ||
+        c.name.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q)
       );
     });
   }, [cards, query, type, status]);
@@ -218,7 +221,9 @@ export default function CardListPage() {
             >
               {exportLabel}
             </Button>
-            <Button>+ Issue Card</Button>
+            <Link href="/card/create">
+              <Button>+ Issue Card</Button>
+            </Link>
           </>
         }
       />
@@ -435,7 +440,14 @@ export default function CardListPage() {
                               .toUpperCase()}
                           </span>
                         )}
-                        <span>{c.name}</span>
+                        <div className="leading-tight">
+                          <div>{c.name}</div>
+                          {c.email && (
+                            <div className="text-[11px] font-normal text-[var(--muted)]">
+                              {c.email}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-3 text-[var(--muted)]">{c.type}</td>

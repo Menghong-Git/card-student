@@ -22,6 +22,7 @@ export type CardStatus = "Active" | "Expired" | "Revoked" | "Pending";
 export type CardRow = {
   id: string;
   name: string;
+  email: string;
   type: CardType;
   section: string;
   grade: string;
@@ -135,6 +136,7 @@ const SEED_CARDS: CardRow[] = [
   {
     id: "BB25-0001",
     name: "Amelia Hartwell",
+    email: "amelia.h@brainbridge.edu",
     type: "Student",
     section: "High School",
     grade: "Grade 10",
@@ -147,6 +149,7 @@ const SEED_CARDS: CardRow[] = [
   {
     id: "BB25-0002",
     name: "Noah Bennett",
+    email: "noah.b@brainbridge.edu",
     type: "Student",
     section: "Middle School",
     grade: "Grade 7",
@@ -159,6 +162,7 @@ const SEED_CARDS: CardRow[] = [
   {
     id: "BB25-T021",
     name: "Ms. Priya Raman",
+    email: "priya.r@brainbridge.edu",
     type: "Teacher",
     section: "Sciences",
     grade: "",
@@ -171,6 +175,7 @@ const SEED_CARDS: CardRow[] = [
   {
     id: "BB24-0881",
     name: "Liam Okafor",
+    email: "liam.o@brainbridge.edu",
     type: "Student",
     section: "Primary School",
     grade: "Grade 5",
@@ -183,6 +188,7 @@ const SEED_CARDS: CardRow[] = [
   {
     id: "BB25-0003",
     name: "Sofia Martínez",
+    email: "sofia.m@brainbridge.edu",
     type: "Student",
     section: "High School",
     grade: "Grade 11",
@@ -195,6 +201,7 @@ const SEED_CARDS: CardRow[] = [
   {
     id: "BB24-T088",
     name: "Mr. Kenji Watanabe",
+    email: "kenji.w@brainbridge.edu",
     type: "Teacher",
     section: "Mathematics",
     grade: "",
@@ -207,6 +214,7 @@ const SEED_CARDS: CardRow[] = [
   {
     id: "BB25-0004",
     name: "Hannah Lindqvist",
+    email: "hannah.l@brainbridge.edu",
     type: "Student",
     section: "Middle School",
     grade: "Grade 8",

@@ -12,6 +12,7 @@ import type { CardRow, CardType, CardStatus } from "./store";
 export const CARD_HEADERS = [
   "id",
   "name",
+  "email",
   "type",
   "section",
   "grade",
@@ -28,6 +29,7 @@ const EXAMPLE_ROWS: string[][] = [
   [
     "BB25-0101",
     "Emma Johnson",
+    "emma.j@brainbridge.edu",
     "Student",
     "High School",
     "Grade 10",
@@ -40,6 +42,7 @@ const EXAMPLE_ROWS: string[][] = [
   [
     "BB25-0102",
     "Liam Smith",
+    "liam.s@brainbridge.edu",
     "Student",
     "Middle School",
     "Grade 7",
@@ -224,6 +227,7 @@ export async function parseCardFile(file: File): Promise<ParseResult> {
     rows.push({
       id,
       name,
+      email: get("email", "e-mail", "mail"),
       type: normalizeType(get("type")),
       section: get("section"),
       grade: get("grade"),
