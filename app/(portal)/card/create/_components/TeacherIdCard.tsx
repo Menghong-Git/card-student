@@ -38,15 +38,23 @@ const PHOTO = { x: 312, y: 412, w: 400, h: 330, r: 20 };
 const ROW_Y = [948, 1006, 1064, 1122];
 const ICON_X = CARD.x + 64;
 const LABEL_X = CARD.x + 124;
-const VALUE_X = CARD.x + 420;
-const ROW_RIGHT = CARD.x + CARD.w - 56;
-const QR = { x: 430, y: 1214, size: 164, pad: 12 };
+const VALUE_X = CARD.x + 400;
+const ROW_RIGHT = CARD.x + CARD.w - 40;
+const QR = { x: 430, y: 1180, size: 164, pad: 12 };
 const FRONT_IMAGE = cropToFill(TEACHER_FRONT_CROP, TEACHER_TEMPLATE_NATURAL_SIZE, FRONT_SIZE);
 
-function valueSize(value: string) {
-  if (value.length > 34) return 20;
-  if (value.length > 27) return 22;
-  return 25;
+const VALUE_FONT_SIZES = [25, 22, 20, 18, 16] as const;
+
+/** Picks the largest font size that fits without squishing; falls back to
+ * the smallest size plus a textLength clamp for values still too wide. */
+function fitValue(value: string, maxWidth: number) {
+  for (const fontSize of VALUE_FONT_SIZES) {
+    if (value.length * fontSize * 0.55 <= maxWidth) {
+      return { fontSize, textLength: undefined as number | undefined };
+    }
+  }
+  const fontSize = VALUE_FONT_SIZES[VALUE_FONT_SIZES.length - 1];
+  return { fontSize, textLength: maxWidth };
 }
 
 function fittedLength(value: string, fontSize: number, maxWidth: number) {
@@ -232,6 +240,7 @@ const TeacherIdCard = forwardRef<SVGSVGElement, TeacherIdCardData>(
 
         {rows.map(([label, value, icon], index) => {
           const y = ROW_Y[index];
+          const { fontSize, textLength } = fitValue(value, ROW_RIGHT - VALUE_X);
           return (
             <g key={label}>
               <Icon kind={icon} x={ICON_X} y={y - 13} />
@@ -249,13 +258,9 @@ const TeacherIdCard = forwardRef<SVGSVGElement, TeacherIdCardData>(
                 x={VALUE_X}
                 y={y}
                 fontFamily="Montserrat, Arial, Helvetica, sans-serif"
-                fontSize={valueSize(value)}
+                fontSize={fontSize}
                 fill={VALUE}
-                textLength={fittedLength(
-                  value,
-                  valueSize(value),
-                  ROW_RIGHT - VALUE_X,
-                )}
+                textLength={textLength}
                 lengthAdjust="spacingAndGlyphs"
               >
                 {value}

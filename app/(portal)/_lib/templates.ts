@@ -46,6 +46,29 @@ export function cropToFill(
   };
 }
 
+/** Like cropToFill, but scales the crop uniformly (no stretch) and centers it
+ *  in the target viewBox, so circular/square art in the crop isn't distorted.
+ *  Returns the same <image> x/y/width/height plus the crop's on-screen
+ *  offset/scale so overlay elements can be positioned relative to it. */
+export function cropToFit(
+  crop: { x: number; y: number; w: number; h: number },
+  natural: { w: number; h: number },
+  target: { w: number; h: number },
+) {
+  const scale = Math.min(target.w / crop.w, target.h / crop.h);
+  const offsetX = (target.w - crop.w * scale) / 2;
+  const offsetY = (target.h - crop.h * scale) / 2;
+  return {
+    x: offsetX - crop.x * scale,
+    y: offsetY - crop.y * scale,
+    width: natural.w * scale,
+    height: natural.h * scale,
+    scale,
+    offsetX,
+    offsetY,
+  };
+}
+
 export function loadFrontTemplate(): Promise<string> {
   return loadImageDataUrl(FRONT_TEMPLATE_URL);
 }

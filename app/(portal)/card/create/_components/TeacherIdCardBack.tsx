@@ -5,7 +5,7 @@ import {
   FRONT_SIZE,
   TEACHER_BACK_CROP,
   TEACHER_TEMPLATE_NATURAL_SIZE,
-  cropToFill,
+  cropToFit,
 } from "../../../_lib/templates";
 
 export type TeacherIdCardBackData = {
@@ -21,46 +21,43 @@ const { w: W, h: H } = FRONT_SIZE;
 const NAVY = "#082544";
 const GOLD = "#c69a3c";
 const FOOTER = {
-  iconX: 178,
-  textX: 238,
+  iconX: 232,
+  textX: 282,
   rows: [1328, 1395, 1457],
 };
-const BACK_IMAGE = cropToFill(TEACHER_BACK_CROP, TEACHER_TEMPLATE_NATURAL_SIZE, FRONT_SIZE);
+const EXPIRES_X = 519;
+/** Uniform (undistorted) fit: the card art is narrower than FRONT_SIZE's
+ * aspect ratio, so it's centered with a small margin instead of stretched. */
+const BACK_IMAGE = cropToFit(TEACHER_BACK_CROP, TEACHER_TEMPLATE_NATURAL_SIZE, FRONT_SIZE);
 
+const ICON_SCALE = 46 / 24;
+
+/** All three icons share the same 24x24 viewBox convention (Heroicons-style)
+ * so their rendered size and stroke weight stay consistent with each other. */
 function FooterIcon({ kind, y }: { kind: number; y: number }) {
-  if (kind === 0) {
-    return (
-      <g transform={`translate(${FOOTER.iconX} ${y - 8})`} fill={GOLD}>
-        <path d="M0-22c-14 0-25 11-25 25 0 20 25 45 25 45S25 23 25 3C25-11 14-22 0-22Zm0 35A10 10 0 1 1 0-7a10 10 0 0 1 0 20Z" />
-      </g>
-    );
-  }
-  if (kind === 1) {
-    return (
-      <g
-        transform={`translate(${FOOTER.iconX} ${y - 8})`}
-        fill="none"
-        stroke={GOLD}
-        strokeWidth="8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M-18-18c7 28 22 43 50 50" />
-        <path d="M-20-18l14-10 14 22-13 9" />
-        <path d="M28 34l10-14-22-14-9 13" />
-      </g>
-    );
-  }
+  const originX = FOOTER.iconX - 12 * ICON_SCALE;
+  const originY = y - 8 - 12 * ICON_SCALE;
   return (
     <g
-      transform={`translate(${FOOTER.iconX} ${y - 8})`}
+      transform={`translate(${originX} ${originY}) scale(${ICON_SCALE})`}
       fill="none"
       stroke={GOLD}
-      strokeWidth="5"
+      strokeWidth="2"
       strokeLinecap="round"
+      strokeLinejoin="round"
     >
-      <circle cx="0" cy="0" r="24" />
-      <path d="M-24 0h48M0-24c10 12 10 36 0 48M0-24c-10 12-10 36 0 48" />
+      {kind === 0 && (
+        <>
+          <path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" />
+          <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+        </>
+      )}
+      {kind === 1 && (
+        <path d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+      )}
+      {kind === 2 && (
+        <path d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      )}
     </g>
   );
 }
@@ -99,7 +96,7 @@ const TeacherIdCardBack = forwardRef<SVGSVGElement, TeacherIdCardBackData>(
         )}
 
         <text
-          x="520"
+          x={EXPIRES_X}
           y="1206"
           fontFamily="Arial, Helvetica, sans-serif"
           fontSize="26"
