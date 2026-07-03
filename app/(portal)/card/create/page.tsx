@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
   Card,
@@ -15,9 +15,13 @@ import {
 } from "../../_components/ui";
 import StudentIdCard from "./_components/StudentIdCard";
 import StudentIdCardBack from "./_components/StudentIdCardBack";
+import TeacherIdCard from "./_components/TeacherIdCard";
+import TeacherIdCardBack from "./_components/TeacherIdCardBack";
 import {
   loadFrontTemplate,
   loadBackTemplate,
+  loadTeacherFrontTemplate,
+  loadTeacherBackTemplate,
   FRONT_SIZE,
   BACK_SIZE,
 } from "../../_lib/templates";
@@ -26,14 +30,19 @@ import { makeQrDataUrl } from "../../_lib/qr";
 import {
   addCards,
   addStudents,
+  addTeachers,
   getStudents,
+  getTeachers,
   useStudents,
+  useTeachers,
   type CardRow,
   type Student,
+  type Teacher,
 } from "../../_lib/store";
 
-// The printed card front renders exactly these values (plus a QR encoded from
-// the ID). `section` is not printed but is carried onto the saved Card List row.
+type CardholderType = "Student" | "Teacher";
+type Mode = "auto" | "manual";
+
 type FormState = {
   name: string;
   email: string;
@@ -42,9 +51,15 @@ type FormState = {
   dob: string;
   photo: string;
   section: string;
+  title: string;
+  department: string;
+  joined: string;
 };
 
-type Mode = "auto" | "manual";
+type LinkedDirectory = {
+  type: CardholderType;
+  id: string;
+};
 
 const GRADES = [
   "Kindergarten",
@@ -62,7 +77,25 @@ const GRADES = [
   "Grade 12",
 ];
 
-const INITIAL: FormState = {
+const TEACHER_TITLES = [
+  "Teacher",
+  "Senior Teacher",
+  "Subject Lead",
+  "Homeroom Teacher",
+  "Head of Department",
+  "School Principle",
+];
+
+const DEPARTMENTS = [
+  "Primary School",
+  "Mathematics",
+  "Sciences",
+  "Languages & Humanities",
+  "Arts & Music",
+  "Physical Education",
+];
+
+const STUDENT_INITIAL: FormState = {
   name: "",
   email: "",
   cardholderId: "BB25-0001",
@@ -70,13 +103,55 @@ const INITIAL: FormState = {
   dob: "",
   photo: "",
   section: "",
+  title: "",
+  department: "",
+  joined: "",
 };
+
+const TEACHER_INITIAL: FormState = {
+  name: "",
+  email: "",
+  cardholderId: "FAC-0001",
+  grade: "",
+  dob: "",
+  photo: "",
+  section: "",
+  title: "Teacher",
+  department: "Sciences",
+  joined: "2022-07-12",
+};
+
+function initialFor(type: CardholderType): FormState {
+  return { ...(type === "Teacher" ? TEACHER_INITIAL : STUDENT_INITIAL) };
+}
 
 function formatDob(d: string) {
   if (!d) return "MM / DD / YYYY";
   const [y, m, day] = d.split("-");
   if (!y || !m || !day) return "MM / DD / YYYY";
   return `${m} / ${day} / ${y}`;
+}
+
+function formatLongDate(d: string) {
+  if (!d) return "Date of Joining";
+  const [y, m, day] = d.split("-");
+  const monthIndex = Number(m) - 1;
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+  if (!y || !m || !day || !months[monthIndex]) return d;
+  return `${Number(day)} ${months[monthIndex]} ${y}`;
 }
 
 function slug(s: string) {
@@ -90,35 +165,44 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Same calendar day, one year on — used for the default card expiry. */
 function plusOneYear(iso: string) {
   const [y, m, d] = iso.split("-");
   if (!y || !m || !d) return iso;
   return `${Number(y) + 1}-${m}-${d}`;
 }
 
-/** Map a directory student record onto the card form. */
 function studentToForm(s: Student): Partial<FormState> {
   return {
     name: s.name,
     email: s.email ?? "",
     cardholderId: s.id,
-    // Imported rows may carry a "—" placeholder grade; keep the current value then.
-    ...(s.grade && s.grade !== "—" ? { grade: s.grade } : {}),
+    ...(s.grade && s.grade !== "-" ? { grade: s.grade } : {}),
     dob: s.dob ?? "",
     photo: s.photo ?? "",
-    section: s.section && s.section !== "—" ? s.section : "",
+    section: s.section && s.section !== "-" ? s.section : "",
+  };
+}
+
+function teacherToForm(t: Teacher): Partial<FormState> {
+  return {
+    name: t.name,
+    email: t.email ?? "",
+    cardholderId: t.id,
+    title: t.title,
+    department: t.department,
+    joined: t.joined ?? "",
+    photo: t.photo ?? "",
   };
 }
 
 export default function CreateCardPage() {
-  const [data, setData] = useState<FormState>(INITIAL);
+  const [cardType, setCardType] = useState<CardholderType>("Student");
+  const [data, setData] = useState<FormState>(() => initialFor("Student"));
   const [mode, setMode] = useState<Mode>("auto");
   const [pickerQuery, setPickerQuery] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
-  // The directory student this card was auto-filled from. Edits are written
-  // back to this record (by its original id) when the card is saved.
-  const [linkedStudentId, setLinkedStudentId] = useState<string | null>(null);
+  const [linkedDirectory, setLinkedDirectory] =
+    useState<LinkedDirectory | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [frontTpl, setFrontTpl] = useState("");
@@ -129,33 +213,62 @@ export default function CreateCardPage() {
   const backRef = useRef<SVGSVGElement>(null);
 
   const students = useStudents();
+  const teachers = useTeachers();
 
   useEffect(() => {
-    loadFrontTemplate()
+    const loadFront =
+      cardType === "Teacher" ? loadTeacherFrontTemplate : loadFrontTemplate;
+    const loadBack =
+      cardType === "Teacher" ? loadTeacherBackTemplate : loadBackTemplate;
+
+    loadFront()
       .then(setFrontTpl)
       .catch((err) => console.error(err));
-    loadBackTemplate()
+    loadBack()
       .then(setBackTpl)
       .catch((err) => console.error(err));
+  }, [cardType]);
+
+  useEffect(() => {
     loadLogoDataUrl()
       .then(setLogo)
       .catch((err) => console.error(err));
   }, []);
 
-  // Prefill from the Student directory when arriving via ?student=<id>.
   useEffect(() => {
-    const sid = new URLSearchParams(window.location.search).get("student");
-    if (!sid) return;
-    const found = getStudents().find((s) => s.id === sid);
-    if (found) {
-      setData((d) => ({ ...d, ...studentToForm(found) }));
-      setPickerQuery(`${found.name} · ${found.id}`);
-      setLinkedStudentId(found.id);
-      setMode("auto");
-    }
+    let active = true;
+    Promise.resolve().then(() => {
+      if (!active) return;
+      const params = new URLSearchParams(window.location.search);
+      const teacherId = params.get("teacher");
+      if (teacherId) {
+        const found = getTeachers().find((t) => t.id === teacherId);
+        if (found) {
+          setCardType("Teacher");
+          setData({ ...initialFor("Teacher"), ...teacherToForm(found) });
+          setPickerQuery(`${found.name} - ${found.id}`);
+          setLinkedDirectory({ type: "Teacher", id: found.id });
+          setMode("auto");
+        }
+        return;
+      }
+
+      const studentId = params.get("student");
+      if (!studentId) return;
+      const found = getStudents().find((s) => s.id === studentId);
+      if (found) {
+        setCardType("Student");
+        setData({ ...initialFor("Student"), ...studentToForm(found) });
+        setPickerQuery(`${found.name} - ${found.id}`);
+        setLinkedDirectory({ type: "Student", id: found.id });
+        setMode("auto");
+      }
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // Regenerate the QR code whenever the ID number changes.
   useEffect(() => {
     let active = true;
     makeQrDataUrl(data.cardholderId)
@@ -170,13 +283,12 @@ export default function CreateCardPage() {
 
   const set =
     <K extends keyof FormState>(key: K) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       setSavedId(null);
       setData((d) => ({ ...d, [key]: e.target.value }) as FormState);
     };
 
-  // Students matching the picker search (by name or ID).
-  const pickerMatches = useMemo(() => {
+  const studentMatches = useMemo(() => {
     const list = students ?? [];
     const q = pickerQuery.trim().toLowerCase();
     if (!q) return list.slice(0, 50);
@@ -188,27 +300,60 @@ export default function CreateCardPage() {
       .slice(0, 50);
   }, [students, pickerQuery]);
 
+  const teacherMatches = useMemo(() => {
+    const list = teachers ?? [];
+    const q = pickerQuery.trim().toLowerCase();
+    if (!q) return list.slice(0, 50);
+    return list
+      .filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          t.id.toLowerCase().includes(q) ||
+          t.title.toLowerCase().includes(q) ||
+          t.department.toLowerCase().includes(q),
+      )
+      .slice(0, 50);
+  }, [teachers, pickerQuery]);
+
   function selectStudent(s: Student) {
     setSavedId(null);
     setData((d) => ({ ...d, ...studentToForm(s) }));
-    setPickerQuery(`${s.name} · ${s.id}`);
-    setLinkedStudentId(s.id);
+    setPickerQuery(`${s.name} - ${s.id}`);
+    setLinkedDirectory({ type: "Student", id: s.id });
     setPickerOpen(false);
+  }
+
+  function selectTeacher(t: Teacher) {
+    setSavedId(null);
+    setData((d) => ({ ...d, ...teacherToForm(t) }));
+    setPickerQuery(`${t.name} - ${t.id}`);
+    setLinkedDirectory({ type: "Teacher", id: t.id });
+    setPickerOpen(false);
+  }
+
+  function switchCardType(next: CardholderType) {
+    if (next === cardType) return;
+    setCardType(next);
+    setData(initialFor(next));
+    setPickerQuery("");
+    setPickerOpen(false);
+    setLinkedDirectory(null);
+    setSavedId(null);
+    setMode("auto");
   }
 
   function switchMode(next: Mode) {
     setMode(next);
     setSavedId(null);
     if (next === "manual") {
-      // Clear any directory-sourced values so the admin starts from a blank slate.
-      setData(INITIAL);
+      setData(initialFor(cardType));
       setPickerQuery("");
       setPickerOpen(false);
-      setLinkedStudentId(null);
+      setLinkedDirectory(null);
     }
   }
 
-  const onPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onPhoto = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setSavedId(null);
@@ -224,31 +369,39 @@ export default function CreateCardPage() {
   };
 
   const reset = () => {
-    setData(INITIAL);
+    setData(initialFor(cardType));
     setPickerQuery("");
     setPickerOpen(false);
     setSavedId(null);
-    setLinkedStudentId(null);
+    setLinkedDirectory(null);
   };
 
   const fullName = data.name;
+  const directoryLabel = cardType.toLowerCase();
+  const directoryLoading =
+    cardType === "Student" ? students === null : teachers === null;
+  const hasPickerMatches =
+    cardType === "Student"
+      ? studentMatches.length > 0
+      : teacherMatches.length > 0;
 
-  /** Persist the current card to the Card List (appears on /card/list). */
   function saveToCardList() {
     const id = data.cardholderId.trim();
     if (!data.name.trim() || !id) {
       window.alert("A name and ID number are required to save the card.");
       return;
     }
+
     const issued = todayIso();
     const row: CardRow = {
       id,
       name: data.name.trim(),
       email: data.email.trim(),
-      type: "Student",
-      section: data.section,
-      grade: data.grade,
-      dob: data.dob,
+      type: cardType,
+      section: cardType === "Teacher" ? data.department : data.section,
+      grade: cardType === "Teacher" ? data.title : data.grade,
+      dob: cardType === "Teacher" ? "" : data.dob,
+      joined: cardType === "Teacher" ? data.joined : undefined,
       image: data.photo,
       issued,
       expires: plusOneYear(issued),
@@ -256,11 +409,8 @@ export default function CreateCardPage() {
     };
     addCards([row]);
 
-    // If this card was auto-filled from a directory student, write the edits
-    // (name, grade, dob, section, photo) back to that student record so the
-    // Student list reflects the new details. Keyed by the original id.
-    if (linkedStudentId) {
-      const existing = getStudents().find((s) => s.id === linkedStudentId);
+    if (linkedDirectory?.type === "Student") {
+      const existing = getStudents().find((s) => s.id === linkedDirectory.id);
       if (existing) {
         addStudents([
           {
@@ -276,10 +426,26 @@ export default function CreateCardPage() {
       }
     }
 
+    if (linkedDirectory?.type === "Teacher") {
+      const existing = getTeachers().find((t) => t.id === linkedDirectory.id);
+      if (existing) {
+        addTeachers([
+          {
+            ...existing,
+            name: data.name.trim(),
+            email: data.email.trim() || existing.email,
+            title: data.title || existing.title,
+            department: data.department || existing.department,
+            joined: data.joined || existing.joined,
+            photo: data.photo || existing.photo,
+          },
+        ]);
+      }
+    }
+
     setSavedId(id);
   }
 
-  /** Rasterize a single card <svg> to an HTMLImageElement. */
   const svgToImage = async (
     svg: SVGSVGElement,
     size: { w: number; h: number },
@@ -287,7 +453,6 @@ export default function CreateCardPage() {
     const clone = svg.cloneNode(true) as SVGSVGElement;
     clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
     clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
-    // Explicit pixel size so the SVG rasterizes at a known resolution.
     clone.setAttribute("width", String(size.w));
     clone.setAttribute("height", String(size.h));
     const source = new XMLSerializer().serializeToString(clone);
@@ -311,13 +476,15 @@ export default function CreateCardPage() {
     if (!front || !back) return;
     setDownloading(true);
     try {
-      const scale = 2; // crisp print-ready PNG
-      const gap = 40 * scale; // white gutter between front and back
+      const scale = 2;
+      const gap = 40 * scale;
       const fW = FRONT_SIZE.w * scale;
       const fH = FRONT_SIZE.h * scale;
-      // Back has a different aspect ratio — scale it to the front's height.
       const bH = fH;
-      const bW = Math.round((bH * BACK_SIZE.w) / BACK_SIZE.h);
+      const bW =
+        cardType === "Teacher"
+          ? fW
+          : Math.round((bH * BACK_SIZE.w) / BACK_SIZE.h);
 
       const [frontImg, backImg] = await Promise.all([
         svgToImage(front, { w: fW, h: fH }),
@@ -343,7 +510,7 @@ export default function CreateCardPage() {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       const fname =
-        slug(fullName || "student") +
+        slug(fullName || directoryLabel) +
         "-" +
         slug(data.cardholderId || "card") +
         ".png";
@@ -372,7 +539,10 @@ export default function CreateCardPage() {
     };
     const gap = 40;
     const h = FRONT_SIZE.h;
-    const backW = Math.round((h * BACK_SIZE.w) / BACK_SIZE.h);
+    const backW =
+      cardType === "Teacher"
+        ? FRONT_SIZE.w
+        : Math.round((h * BACK_SIZE.w) / BACK_SIZE.h);
     const w = FRONT_SIZE.w + gap + backW;
     const source =
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">` +
@@ -384,7 +554,7 @@ export default function CreateCardPage() {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     const fname =
-      slug(fullName || "student") +
+      slug(fullName || directoryLabel) +
       "-" +
       slug(data.cardholderId || "card") +
       ".svg";
@@ -399,7 +569,7 @@ export default function CreateCardPage() {
     <>
       <PageHeader
         title="Create New Card"
-        description="Issue a Brain Bridge School identification card. Auto-fill from a student or enter the details manually, then save it to the Card List."
+        description="Issue a Brain Bridge School identification card. Auto-fill from a student or teacher directory, then save it to the Card List."
         actions={
           <>
             <Button variant="secondary" onClick={reset} type="button">
@@ -417,32 +587,48 @@ export default function CreateCardPage() {
           <span>
             Card <span className="font-mono font-medium">{savedId}</span> saved
             to the Card List
-            {linkedStudentId
-              ? ", and the linked student was updated in the directory."
+            {linkedDirectory
+              ? `, and the linked ${linkedDirectory.type.toLowerCase()} was updated in the directory.`
               : "."}
           </span>
           <Link
             href="/card/list"
             className="font-medium underline hover:opacity-80"
           >
-            View in Card List →
+            View in Card List -&gt;
           </Link>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* ===== FORM ===== */}
         <div className="lg:col-span-3 space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Cardholder Information</CardTitle>
             </CardHeader>
             <CardBody className="space-y-5">
-              {/* Mode switch: auto-fill from directory vs. manual entry */}
+              <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
+                {(["Student", "Teacher"] as CardholderType[]).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => switchCardType(type)}
+                    className={[
+                      "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      cardType === type
+                        ? "bg-white text-[var(--primary)] shadow-sm"
+                        : "text-[var(--muted)] hover:text-[var(--foreground)]",
+                    ].join(" ")}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+
               <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
                 {(
                   [
-                    ["auto", "Auto-fill from directory"],
+                    ["auto", `Auto-fill from ${directoryLabel} directory`],
                     ["manual", "Create manually"],
                   ] as [Mode, string][]
                 ).map(([key, label]) => (
@@ -464,8 +650,8 @@ export default function CreateCardPage() {
 
               {mode === "auto" && (
                 <Field
-                  label="Find a student"
-                  hint="Search by name or ID, or pick from the list — fields fill in automatically."
+                  label={`Find a ${directoryLabel}`}
+                  hint={`Search by name or ID, or pick from the ${directoryLabel} list.`}
                 >
                   <div className="relative">
                     <Input
@@ -477,24 +663,22 @@ export default function CreateCardPage() {
                       onFocus={() => setPickerOpen(true)}
                       onBlur={() => setPickerOpen(false)}
                       placeholder={
-                        students === null
-                          ? "Loading students…"
-                          : "Search students…"
+                        directoryLoading
+                          ? `Loading ${directoryLabel}s...`
+                          : `Search ${directoryLabel}s...`
                       }
                     />
                     {pickerOpen && (
                       <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border border-[var(--border)] bg-white py-1 shadow-lg">
-                        {pickerMatches.length === 0 ? (
+                        {!hasPickerMatches ? (
                           <li className="px-3 py-2 text-sm text-[var(--muted)]">
-                            No students match.
+                            No {directoryLabel}s match.
                           </li>
-                        ) : (
-                          pickerMatches.map((s) => (
+                        ) : cardType === "Student" ? (
+                          studentMatches.map((s) => (
                             <li key={s.id}>
                               <button
                                 type="button"
-                                // mousedown fires before the input blur, so the
-                                // pick registers before the dropdown closes.
                                 onMouseDown={(e) => {
                                   e.preventDefault();
                                   selectStudent(s);
@@ -506,6 +690,31 @@ export default function CreateCardPage() {
                                 </span>
                                 <span className="font-mono text-xs text-[var(--muted)]">
                                   {s.id}
+                                </span>
+                              </button>
+                            </li>
+                          ))
+                        ) : (
+                          teacherMatches.map((t) => (
+                            <li key={t.id}>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  selectTeacher(t);
+                                }}
+                                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                              >
+                                <span>
+                                  <span className="block font-medium text-[var(--foreground)]">
+                                    {t.name}
+                                  </span>
+                                  <span className="block text-xs text-[var(--muted)]">
+                                    {t.title} - {t.department}
+                                  </span>
+                                </span>
+                                <span className="font-mono text-xs text-[var(--muted)]">
+                                  {t.id}
                                 </span>
                               </button>
                             </li>
@@ -523,7 +732,9 @@ export default function CreateCardPage() {
                     <Input
                       value={data.name}
                       onChange={set("name")}
-                      placeholder="Jane Doe"
+                      placeholder={
+                        cardType === "Teacher" ? "Ms. Jane Doe" : "Jane Doe"
+                      }
                     />
                   </Field>
                 </div>
@@ -537,23 +748,69 @@ export default function CreateCardPage() {
                     />
                   </Field>
                 </div>
-                <Field label="ID Number" required hint="Encoded into the QR code">
+                <Field
+                  label="ID Number"
+                  required
+                  hint="Encoded into the QR code"
+                >
                   <Input
                     value={data.cardholderId}
                     onChange={set("cardholderId")}
-                    placeholder="BB25-0001"
+                    placeholder={
+                      cardType === "Teacher" ? "FAC-0001" : "BB25-0001"
+                    }
                   />
                 </Field>
-                <Field label="Grade" required>
-                  <Select value={data.grade} onChange={set("grade")}>
-                    {GRADES.map((g) => (
-                      <option key={g}>{g}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Date of Birth">
-                  <Input type="date" value={data.dob} onChange={set("dob")} />
-                </Field>
+
+                {cardType === "Student" ? (
+                  <>
+                    <Field label="Grade" required>
+                      <Select value={data.grade} onChange={set("grade")}>
+                        {GRADES.map((g) => (
+                          <option key={g}>{g}</option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field label="Date of Birth">
+                      <Input
+                        type="date"
+                        value={data.dob}
+                        onChange={set("dob")}
+                      />
+                    </Field>
+                  </>
+                ) : (
+                  <>
+                    <Field label="Title" required>
+                      <Select value={data.title} onChange={set("title")}>
+                        {!TEACHER_TITLES.includes(data.title) &&
+                          data.title && <option>{data.title}</option>}
+                        {TEACHER_TITLES.map((title) => (
+                          <option key={title}>{title}</option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field label="Department" required>
+                      <Select
+                        value={data.department}
+                        onChange={set("department")}
+                      >
+                        {!DEPARTMENTS.includes(data.department) &&
+                          data.department && <option>{data.department}</option>}
+                        {DEPARTMENTS.map((department) => (
+                          <option key={department}>{department}</option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field label="Date of Joining">
+                      <Input
+                        type="date"
+                        value={data.joined}
+                        onChange={set("joined")}
+                      />
+                    </Field>
+                  </>
+                )}
               </div>
             </CardBody>
           </Card>
@@ -588,7 +845,7 @@ export default function CreateCardPage() {
                     Click to upload a photo
                   </p>
                   <p className="text-[11px] text-[var(--muted)]">
-                    JPG or PNG, square preferred · max 4 MB
+                    JPG or PNG, square preferred - max 4 MB
                   </p>
                   <input
                     type="file"
@@ -622,14 +879,13 @@ export default function CreateCardPage() {
           </Card>
         </div>
 
-        {/* ===== PREVIEW ===== */}
         <div className="lg:col-span-2">
           <div className="lg:sticky lg:top-20 space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>Live Card Preview</CardTitle>
                 <span className="text-[11px] text-[var(--muted)]">
-                  Front &amp; back · portrait · 428 × 619
+                  Front &amp; back - portrait - 428 x 619
                 </span>
               </CardHeader>
               <CardBody className="bg-slate-50 rounded-b-xl space-y-5">
@@ -637,23 +893,47 @@ export default function CreateCardPage() {
                   <p className="mb-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
                     Front
                   </p>
-                  <StudentIdCard
-                    ref={svgRef}
-                    name={fullName || "Full Name"}
-                    id={data.cardholderId || "BB25-0000"}
-                    grade={data.grade || "—"}
-                    dob={formatDob(data.dob)}
-                    photo={data.photo}
-                    template={frontTpl}
-                    logo={logo}
-                    qr={qr}
-                  />
+                  {cardType === "Teacher" ? (
+                    <TeacherIdCard
+                      ref={svgRef}
+                      name={fullName || "Full Name"}
+                      id={data.cardholderId || "FAC-0000"}
+                      email={data.email}
+                      title={data.title || "Teacher"}
+                      department={data.department || "Department"}
+                      joined={formatLongDate(data.joined)}
+                      photo={data.photo}
+                      template={frontTpl}
+                      logo={logo}
+                      qr={qr}
+                    />
+                  ) : (
+                    <StudentIdCard
+                      ref={svgRef}
+                      name={fullName || "Full Name"}
+                      id={data.cardholderId || "BB25-0000"}
+                      grade={data.grade || "-"}
+                      dob={formatDob(data.dob)}
+                      photo={data.photo}
+                      template={frontTpl}
+                      logo={logo}
+                      qr={qr}
+                    />
+                  )}
                 </div>
                 <div className="mx-auto" style={{ maxWidth: 340 }}>
                   <p className="mb-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
                     Back
                   </p>
-                  <StudentIdCardBack ref={backRef} template={backTpl} />
+                  {cardType === "Teacher" ? (
+                    <TeacherIdCardBack
+                      ref={backRef}
+                      template={backTpl}
+                      expires={formatLongDate(plusOneYear(todayIso()))}
+                    />
+                  ) : (
+                    <StudentIdCardBack ref={backRef} template={backTpl} />
+                  )}
                 </div>
               </CardBody>
             </Card>
@@ -670,7 +950,7 @@ export default function CreateCardPage() {
                 className="flex-1"
                 type="button"
               >
-                {downloading ? "Preparing…" : "Download PNG"}
+                {downloading ? "Preparing..." : "Download PNG"}
               </Button>
               <Button
                 variant="secondary"

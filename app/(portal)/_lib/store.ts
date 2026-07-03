@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 export type Student = {
   id: string;
@@ -12,6 +12,19 @@ export type Student = {
   status: "Active" | "On Leave" | "Inactive";
   dob?: string;
   /** Profile photo — data URI or URL (used as the card photo on export). */
+  photo?: string;
+};
+
+export type Teacher = {
+  id: string;
+  name: string;
+  email: string;
+  title: string;
+  department: string;
+  joined?: string;
+  classes: number;
+  status: "Active" | "On Leave" | "Inactive";
+  /** Profile photo - data URI or URL (used as the card photo on export). */
   photo?: string;
 };
 
@@ -27,6 +40,8 @@ export type CardRow = {
   section: string;
   grade: string;
   dob: string;
+  /** Teacher/staff date of joining, stored as yyyy-mm-dd when available. */
+  joined?: string;
   /** Profile image — data URI or URL. Used as the card photo on export. */
   image: string;
   issued: string;
@@ -71,6 +86,7 @@ export type IdRecord = {
 };
 
 const STUDENTS_KEY = "bb.students.v1";
+const TEACHERS_KEY = "bb.teachers.v1";
 const GROUPS_KEY = "bb.groups.v1";
 const ID_RECORDS_KEY = "bb.idcards.v1";
 const CARDS_KEY = "bb.cards.v1";
@@ -128,6 +144,59 @@ const SEED_STUDENTS: Student[] = [
     section: "High School",
     homeroom: "9-B",
     grade: "Grade 9",
+    status: "Active",
+  },
+];
+
+const SEED_TEACHERS: Teacher[] = [
+  {
+    id: "FAC-0421",
+    name: "Ms. Priya Raman",
+    email: "p.raman@brainbridge.edu",
+    title: "Subject Lead",
+    department: "Sciences",
+    joined: "2022-07-12",
+    classes: 4,
+    status: "Active",
+  },
+  {
+    id: "FAC-0388",
+    name: "Mr. Kenji Watanabe",
+    email: "k.watanabe@brainbridge.edu",
+    title: "Senior Teacher",
+    department: "Mathematics",
+    joined: "2021-08-04",
+    classes: 5,
+    status: "Active",
+  },
+  {
+    id: "FAC-0512",
+    name: "Ms. Elena Costa",
+    email: "e.costa@brainbridge.edu",
+    title: "Homeroom Teacher",
+    department: "Primary School",
+    joined: "2023-01-09",
+    classes: 6,
+    status: "Active",
+  },
+  {
+    id: "FAC-0233",
+    name: "Mr. Marcus Hale",
+    email: "m.hale@brainbridge.edu",
+    title: "Head of Department",
+    department: "Languages & Humanities",
+    joined: "2020-06-18",
+    classes: 3,
+    status: "On Leave",
+  },
+  {
+    id: "FAC-0617",
+    name: "Ms. Aisha Rahman",
+    email: "a.rahman@brainbridge.edu",
+    title: "Teacher",
+    department: "Arts & Music",
+    joined: "2024-03-25",
+    classes: 5,
     status: "Active",
   },
 ];
@@ -258,6 +327,21 @@ function ensureSeeded() {
   if (window.localStorage.getItem(STUDENTS_KEY) === null) {
     writeJSON(STUDENTS_KEY, SEED_STUDENTS);
   }
+  if (window.localStorage.getItem(TEACHERS_KEY) === null) {
+    writeJSON(TEACHERS_KEY, SEED_TEACHERS);
+  } else {
+    const seededById = new Map(SEED_TEACHERS.map((t) => [t.id, t]));
+    const teachers = readJSON<Teacher[]>(TEACHERS_KEY, []);
+    if (teachers.some((t) => t.joined === undefined)) {
+      writeJSON(
+        TEACHERS_KEY,
+        teachers.map((t) => ({
+          ...t,
+          joined: t.joined ?? seededById.get(t.id)?.joined ?? "",
+        })),
+      );
+    }
+  }
   if (window.localStorage.getItem(GROUPS_KEY) === null) {
     writeJSON(GROUPS_KEY, [] as Group[]);
   }
@@ -267,6 +351,12 @@ function ensureSeeded() {
   if (window.localStorage.getItem(CARDS_KEY) === null) {
     writeJSON(CARDS_KEY, SEED_CARDS);
   }
+}
+
+function storageSnapshot(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  ensureSeeded();
+  return window.localStorage.getItem(key);
 }
 
 export function getStudents(): Student[] {
@@ -284,6 +374,23 @@ export function addStudents(rows: Student[]) {
   const byId = new Map(current.map((s) => [s.id, s]));
   for (const r of rows) byId.set(r.id, r);
   setStudents(Array.from(byId.values()));
+}
+
+export function getTeachers(): Teacher[] {
+  ensureSeeded();
+  return readJSON<Teacher[]>(TEACHERS_KEY, SEED_TEACHERS);
+}
+
+export function setTeachers(next: Teacher[]) {
+  writeJSON(TEACHERS_KEY, next);
+  emit();
+}
+
+export function addTeachers(rows: Teacher[]) {
+  const current = getTeachers();
+  const byId = new Map(current.map((t) => [t.id, t]));
+  for (const r of rows) byId.set(r.id, r);
+  setTeachers(Array.from(byId.values()));
 }
 
 export function getCards(): CardRow[] {
@@ -332,10 +439,7 @@ export function useCards(): CardRow[] | null {
   // separate "hydrated" effect is needed to avoid a hydration mismatch.
   const snapshot = useSyncExternalStore(
     subscribe,
-    () =>
-      typeof window === "undefined"
-        ? null
-        : window.localStorage.getItem(CARDS_KEY),
+    () => storageSnapshot(CARDS_KEY),
     () => null,
   );
   return useMemo(() => (snapshot === null ? null : getCards()), [snapshot]);
@@ -390,40 +494,40 @@ export function deleteIdRecord(recordId: string) {
 }
 
 export function useIdRecords(): IdRecord[] | null {
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => setHydrated(true), []);
   const snapshot = useSyncExternalStore(
     subscribe,
-    () =>
-      typeof window === "undefined"
-        ? null
-        : window.localStorage.getItem(ID_RECORDS_KEY),
+    () => storageSnapshot(ID_RECORDS_KEY),
     () => null,
   );
   return useMemo(
-    () => (hydrated ? getIdRecords() : null),
-    [hydrated, snapshot],
+    () => (snapshot === null ? null : getIdRecords()),
+    [snapshot],
   );
 }
 
 export function useStudents(): Student[] | null {
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => setHydrated(true), []);
   const snapshot = useSyncExternalStore(
     subscribe,
-    () => (typeof window === "undefined" ? null : window.localStorage.getItem(STUDENTS_KEY)),
+    () => storageSnapshot(STUDENTS_KEY),
     () => null,
   );
-  return useMemo(() => (hydrated ? getStudents() : null), [hydrated, snapshot]);
+  return useMemo(() => (snapshot === null ? null : getStudents()), [snapshot]);
+}
+
+export function useTeachers(): Teacher[] | null {
+  const snapshot = useSyncExternalStore(
+    subscribe,
+    () => storageSnapshot(TEACHERS_KEY),
+    () => null,
+  );
+  return useMemo(() => (snapshot === null ? null : getTeachers()), [snapshot]);
 }
 
 export function useGroups(): Group[] | null {
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => setHydrated(true), []);
   const snapshot = useSyncExternalStore(
     subscribe,
-    () => (typeof window === "undefined" ? null : window.localStorage.getItem(GROUPS_KEY)),
+    () => storageSnapshot(GROUPS_KEY),
     () => null,
   );
-  return useMemo(() => (hydrated ? getGroups() : null), [hydrated, snapshot]);
+  return useMemo(() => (snapshot === null ? null : getGroups()), [snapshot]);
 }

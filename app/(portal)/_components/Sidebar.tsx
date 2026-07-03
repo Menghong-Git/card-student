@@ -132,7 +132,7 @@ export default function Sidebar() {
         icon: USER_ICON,
         children: [
           { label: "Student", href: "/user/student" },
-          // { label: "Teacher", href: "/user/teacher" },
+          { label: "Teacher", href: "/user/teacher" },
         ],
       },
       { label: "Profile", href: "/profile", icon: PROFILE_ICON },

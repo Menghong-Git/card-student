@@ -20,7 +20,6 @@ import {
   deleteCard,
   type CardRow,
   type CardStatus,
-  type Student,
 } from "../../_lib/store";
 import {
   parseCardFile,
@@ -34,20 +33,6 @@ const toneFor: Record<CardStatus, "success" | "warning" | "danger" | "info"> = {
   Expired: "warning",
   Revoked: "danger",
 };
-
-function cardToStudent(c: CardRow): Student {
-  return {
-    id: c.id,
-    name: c.name,
-    email: c.email,
-    section: c.section,
-    homeroom: "",
-    grade: c.grade || c.type,
-    status: c.status === "Active" ? "Active" : "Inactive",
-    dob: c.dob,
-    photo: c.image,
-  };
-}
 
 type ImportResult = {
   added: number;
@@ -152,7 +137,7 @@ export default function CardListPage() {
     setExportProgress({ done: 0, total: exportList.length });
     try {
       await exportCardsAsZip(
-        exportList.map(cardToStudent),
+        exportList,
         `cards-${stamp}.zip`,
         (done, total) => setExportProgress({ done, total }),
       );
@@ -176,7 +161,7 @@ export default function CardListPage() {
   async function handleDownloadOne(c: CardRow) {
     setDownloadingId(c.id);
     try {
-      await exportSingleCard(cardToStudent(c));
+      await exportSingleCard(c);
     } finally {
       setDownloadingId(null);
     }

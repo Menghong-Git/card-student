@@ -10,15 +10,42 @@ import StudentIdCard, {
 import StudentIdCardBack, {
   type StudentIdCardBackData,
 } from "../card/create/_components/StudentIdCardBack";
-import { loadFrontTemplate, loadBackTemplate, FRONT_SIZE, BACK_SIZE } from "./templates";
+import TeacherIdCard, {
+  type TeacherIdCardData,
+} from "../card/create/_components/TeacherIdCard";
+import TeacherIdCardBack, {
+  type TeacherIdCardBackData,
+} from "../card/create/_components/TeacherIdCardBack";
+import {
+  loadFrontTemplate,
+  loadBackTemplate,
+  loadTeacherFrontTemplate,
+  loadTeacherBackTemplate,
+  FRONT_SIZE,
+  BACK_SIZE,
+} from "./templates";
 import { loadLogoDataUrl, loadImageDataUrl } from "./logo";
 import { makeQrDataUrl } from "./qr";
-import type { Student } from "./store";
+import type { CardType } from "./store";
 
 const CARD_GAP = 40;
 const EXPORT_SCALE = 2;
 
 type Size = { w: number; h: number };
+
+export type CardExportRecord = {
+  id: string;
+  name: string;
+  email?: string;
+  type?: CardType;
+  section?: string;
+  grade?: string;
+  dob?: string;
+  joined?: string;
+  expires?: string;
+  photo?: string;
+  image?: string;
+};
 
 /** Final raster sizes for export. Front sets the height; the back (a different
  *  aspect ratio) is scaled to the same height so they line up side by side. */
@@ -39,6 +66,31 @@ function formatDob(value: string | undefined): string {
   return m ? `${m[2]} / ${m[3]} / ${m[1]}` : d;
 }
 
+function formatLongDate(
+  value: string | undefined,
+  fallback = "Date of Joining",
+): string {
+  const d = (value ?? "").trim();
+  if (!d) return fallback;
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return d;
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+  return `${Number(m[3])} ${months[Number(m[2]) - 1]} ${m[1]}`;
+}
+
 /** Resolve a photo (data URI or URL) to an embeddable data URI; the export
  *  rasterizer can't load external URLs, so URLs are fetched + inlined. */
 async function resolvePhoto(raw: string | undefined): Promise<string> {
@@ -53,7 +105,7 @@ async function resolvePhoto(raw: string | undefined): Promise<string> {
 }
 
 function studentToCardData(
-  s: Student,
+  s: CardExportRecord,
   template: string,
   logo: string,
   qr: string,
@@ -62,8 +114,29 @@ function studentToCardData(
   return {
     name: s.name,
     id: s.id,
-    grade: s.grade,
+    grade: s.grade ?? "",
     dob: formatDob(s.dob),
+    photo,
+    template,
+    logo,
+    qr,
+  };
+}
+
+function teacherToCardData(
+  t: CardExportRecord,
+  template: string,
+  logo: string,
+  qr: string,
+  photo: string,
+): TeacherIdCardData {
+  return {
+    name: t.name,
+    id: t.id,
+    email: t.email ?? "",
+    title: t.grade || "Teacher",
+    department: t.section || "Department",
+    joined: formatLongDate(t.joined ?? t.dob, "Date of Joining"),
     photo,
     template,
     logo,
@@ -73,6 +146,13 @@ function studentToCardData(
 
 function studentToBackData(template: string): StudentIdCardBackData {
   return { template };
+}
+
+function teacherToBackData(
+  template: string,
+  record: CardExportRecord,
+): TeacherIdCardBackData {
+  return { template, expires: formatLongDate(record.expires, "31 March 2026") };
 }
 
 function safeFilename(value: string): string {
@@ -176,45 +256,52 @@ function triggerDownload(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export async function renderCardPng(student: Student): Promise<Blob> {
+export async function renderCardPng(record: CardExportRecord): Promise<Blob> {
+  const isTeacher = record.type === "Teacher";
   const [frontTemplate, backTemplate, logo, qr, photo] = await Promise.all([
-    loadFrontTemplate(),
-    loadBackTemplate(),
+    isTeacher ? loadTeacherFrontTemplate() : loadFrontTemplate(),
+    isTeacher ? loadTeacherBackTemplate() : loadBackTemplate(),
     loadLogoDataUrl(),
-    makeQrDataUrl(student.id),
-    resolvePhoto(student.photo),
+    makeQrDataUrl(record.id),
+    resolvePhoto(record.photo ?? record.image),
   ]);
   const sizes = exportSizes();
+  const frontData = isTeacher
+    ? teacherToCardData(record, frontTemplate, logo, qr, photo)
+    : studentToCardData(record, frontTemplate, logo, qr, photo);
+  const backSize = isTeacher ? sizes.front : sizes.back;
   const [front, back] = await Promise.all([
+    renderCardSvg(isTeacher ? TeacherIdCard : StudentIdCard, frontData, sizes.front),
     renderCardSvg(
-      StudentIdCard,
-      studentToCardData(student, frontTemplate, logo, qr, photo),
-      sizes.front,
+      isTeacher ? TeacherIdCardBack : StudentIdCardBack,
+      isTeacher
+        ? teacherToBackData(backTemplate, record)
+        : studentToBackData(backTemplate),
+      backSize,
     ),
-    renderCardSvg(StudentIdCardBack, studentToBackData(backTemplate), sizes.back),
   ]);
-  return composeCardsPngBlob(front, back, sizes.front, sizes.back, sizes.gap);
+  return composeCardsPngBlob(front, back, sizes.front, backSize, sizes.gap);
 }
 
-export async function exportSingleCard(student: Student): Promise<void> {
-  const blob = await renderCardPng(student);
-  const filename = `${safeFilename(student.name || "card")}-${safeFilename(student.id || "id")}.png`;
+export async function exportSingleCard(record: CardExportRecord): Promise<void> {
+  const blob = await renderCardPng(record);
+  const filename = `${safeFilename(record.name || "card")}-${safeFilename(record.id || "id")}.png`;
   triggerDownload(blob, filename);
 }
 
 export async function exportCardsAsZip(
-  students: Student[],
+  records: CardExportRecord[],
   zipName: string,
   onProgress?: (done: number, total: number) => void,
 ): Promise<void> {
-  if (students.length === 0) return;
+  if (records.length === 0) return;
   const zip = new JSZip();
-  for (let i = 0; i < students.length; i++) {
-    const s = students[i];
-    const blob = await renderCardPng(s);
-    const filename = `${String(i + 1).padStart(3, "0")}-${safeFilename(s.name || "card")}-${safeFilename(s.id || "id")}.png`;
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
+    const blob = await renderCardPng(record);
+    const filename = `${String(i + 1).padStart(3, "0")}-${safeFilename(record.name || "card")}-${safeFilename(record.id || "id")}.png`;
     zip.file(filename, blob);
-    onProgress?.(i + 1, students.length);
+    onProgress?.(i + 1, records.length);
   }
   const zipBlob = await zip.generateAsync({ type: "blob" });
   triggerDownload(zipBlob, zipName);
