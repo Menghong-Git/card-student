@@ -69,6 +69,7 @@ export default function GroupDetailPage() {
       await exportCardsAsZip(
         members,
         `cards-${safe || "group"}-${group.homeroom}-${stamp}.zip`,
+        "auto",
         (done, total) => setExportProgress({ done, total }),
       );
     } finally {

@@ -5,7 +5,7 @@ import {
   FRONT_SIZE,
   TEACHER_BACK_CROP,
   TEACHER_TEMPLATE_NATURAL_SIZE,
-  cropToFit,
+  cropToFill,
 } from "../../../_lib/templates";
 
 export type TeacherIdCardBackData = {
@@ -26,9 +26,9 @@ const FOOTER = {
   rows: [1328, 1395, 1457],
 };
 const EXPIRES_X = 519;
-/** Uniform (undistorted) fit: the card art is narrower than FRONT_SIZE's
- * aspect ratio, so it's centered with a small margin instead of stretched. */
-const BACK_IMAGE = cropToFit(TEACHER_BACK_CROP, TEACHER_TEMPLATE_NATURAL_SIZE, FRONT_SIZE);
+/** Stretched to fill the frame edge-to-edge, matching the front card's fill
+ * so front and back render at the same visible size (no inset margin). */
+const BACK_IMAGE = cropToFill(TEACHER_BACK_CROP, TEACHER_TEMPLATE_NATURAL_SIZE, FRONT_SIZE);
 
 const ICON_SCALE = 46 / 24;
 
@@ -95,16 +95,7 @@ const TeacherIdCardBack = forwardRef<SVGSVGElement, TeacherIdCardBackData>(
           <rect width={W} height={H} rx="36" fill="#ffffff" />
         )}
 
-        <text
-          x={EXPIRES_X}
-          y="1206"
-          fontFamily="Arial, Helvetica, sans-serif"
-          fontSize="26"
-          fontWeight="700"
-          fill={NAVY}
-        >
-          {expires}
-        </text>
+        
 
         <FooterIcon kind={0} y={FOOTER.rows[0]} />
         <text

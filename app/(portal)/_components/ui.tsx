@@ -25,7 +25,9 @@ export function PageHeader({
           <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>
         )}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && (
+        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+      )}
     </div>
   );
 }
@@ -82,7 +84,7 @@ export function Button({
   ...props
 }: ButtonProps) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-50 disabled:cursor-not-allowed";
+    "inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0 rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-50 disabled:cursor-not-allowed";
   const sizes = {
     sm: "h-8 px-3 text-xs",
     md: "h-10 px-4 text-sm",
@@ -140,10 +142,26 @@ export function Select(
 ) {
   const { className, ...rest } = props;
   return (
-    <select
-      className={cx(inputBase, "appearance-none bg-white pr-9", className)}
-      {...rest}
-    />
+    <div className="relative">
+      <select
+        className={cx(inputBase, "appearance-none bg-white pr-9", className)}
+        {...rest}
+      />
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]"
+      >
+        <path
+          d="m6 9 6 6 6-6"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
   );
 }
 

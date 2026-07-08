@@ -4,12 +4,13 @@ import * as XLSX from "xlsx";
 import type { CardRow, CardType, CardStatus } from "./store";
 
 /**
- * Card import/export format. Each row in the CSV / Excel file is ONE student
- * card. Column order below is what the downloadable template produces; on
- * import, headers are matched case-insensitively and a few aliases are
- * accepted, so column order does not matter.
+ * Card import/export format. Students and teachers have different fields
+ * (a teacher card shows title/department/date-joined, not section/grade/dob),
+ * so each gets its own template and its own column order. On import, headers
+ * are matched case-insensitively and a few aliases are accepted, so column
+ * order does not matter.
  */
-export const CARD_HEADERS = [
+export const STUDENT_CARD_HEADERS = [
   "id",
   "name",
   "email",
@@ -23,9 +24,23 @@ export const CARD_HEADERS = [
   "status",
 ] as const;
 
+export const TEACHER_CARD_HEADERS = [
+  "id",
+  "name",
+  "email",
+  "type",
+  "department",
+  "title",
+  "joined",
+  "image",
+  "intake",
+  "expires",
+  "status",
+] as const;
+
 /** Two filled-in example rows so the template shows the expected shape.
  *  `image` accepts a URL or a data URI (leave blank for none). */
-const EXAMPLE_ROWS: string[][] = [
+const STUDENT_EXAMPLE_ROWS: string[][] = [
   [
     "BB25-0101",
     "Emma Johnson",
@@ -54,6 +69,35 @@ const EXAMPLE_ROWS: string[][] = [
   ],
 ];
 
+const TEACHER_EXAMPLE_ROWS: string[][] = [
+  [
+    "BB25-T101",
+    "Priya Raman",
+    "p.raman@brainbridge.edu",
+    "Teacher",
+    "Sciences",
+    "Subject Lead",
+    "2022-07-12",
+    "https://example.com/photos/priya.jpg",
+    "2025-09-01",
+    "2026-09-01",
+    "Active",
+  ],
+  [
+    "BB25-T102",
+    "Kenji Watanabe",
+    "k.watanabe@brainbridge.edu",
+    "Teacher",
+    "Mathematics",
+    "Senior Teacher",
+    "2021-08-04",
+    "",
+    "2025-09-01",
+    "2026-09-01",
+    "Active",
+  ],
+];
+
 const VALID_TYPES: CardType[] = ["Student", "Teacher", "Staff"];
 const VALID_STATUS: CardStatus[] = ["Active", "Expired", "Revoked", "Pending"];
 
@@ -73,25 +117,65 @@ function csvCell(value: string): string {
   return value;
 }
 
-/** Download the import template as a CSV file (with a UTF-8 BOM for Excel). */
-export function downloadCsvTemplate() {
-  const rows = [Array.from(CARD_HEADERS), ...EXAMPLE_ROWS];
+function downloadCsv(
+  headers: readonly string[],
+  exampleRows: string[][],
+  filename: string,
+) {
+  const rows = [Array.from(headers), ...exampleRows];
   const csv = rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
-  const blob = new Blob(["﻿" + csv], {
-    type: "text/csv;charset=utf-8",
-  });
-  triggerDownload(blob, "card-import-template.csv");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  triggerDownload(blob, filename);
 }
 
-/** Download the import template as an .xlsx file. */
-export function downloadXlsxTemplate() {
-  const ws = XLSX.utils.aoa_to_sheet([Array.from(CARD_HEADERS), ...EXAMPLE_ROWS]);
+function downloadXlsx(
+  headers: readonly string[],
+  exampleRows: string[][],
+  filename: string,
+) {
+  const ws = XLSX.utils.aoa_to_sheet([Array.from(headers), ...exampleRows]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Cards");
   const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   triggerDownload(
     new Blob([out], { type: "application/octet-stream" }),
-    "card-import-template.xlsx",
+    filename,
+  );
+}
+
+/** Download the student import template as a CSV file (UTF-8 BOM for Excel). */
+export function downloadStudentCsvTemplate() {
+  downloadCsv(
+    STUDENT_CARD_HEADERS,
+    STUDENT_EXAMPLE_ROWS,
+    "student-card-import-template.csv",
+  );
+}
+
+/** Download the student import template as an .xlsx file. */
+export function downloadStudentXlsxTemplate() {
+  downloadXlsx(
+    STUDENT_CARD_HEADERS,
+    STUDENT_EXAMPLE_ROWS,
+    "student-card-import-template.xlsx",
+  );
+}
+
+/** Download the teacher import template as a CSV file (UTF-8 BOM for Excel). */
+export function downloadTeacherCsvTemplate() {
+  downloadCsv(
+    TEACHER_CARD_HEADERS,
+    TEACHER_EXAMPLE_ROWS,
+    "teacher-card-import-template.csv",
+  );
+}
+
+/** Download the teacher import template as an .xlsx file. */
+export function downloadTeacherXlsxTemplate() {
+  downloadXlsx(
+    TEACHER_CARD_HEADERS,
+    TEACHER_EXAMPLE_ROWS,
+    "teacher-card-import-template.xlsx",
   );
 }
 
@@ -100,9 +184,9 @@ export type ParseResult = {
   errors: string[];
 };
 
-function normalizeType(raw: string): CardType {
+function normalizeType(raw: string, fallback: CardType): CardType {
   const v = raw.trim().toLowerCase();
-  return VALID_TYPES.find((t) => t.toLowerCase() === v) ?? "Student";
+  return VALID_TYPES.find((t) => t.toLowerCase() === v) ?? fallback;
 }
 
 function normalizeStatus(raw: string): CardStatus {
@@ -166,13 +250,22 @@ function toIsoIfDate(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+/** Which card list ("Student" or "Teacher" tab) a file is being imported into.
+ *  Determines the default type for rows that omit a "type" column, and which
+ *  columns are read: students use section/grade/dob, teachers use
+ *  department/title/date-joined. */
+export type CardImportKind = "student" | "teacher";
+
 /**
  * Parse a CSV or Excel (.xlsx/.xls) file into card rows. Matches headers
  * case-insensitively (with a few aliases), validates that id + name are
  * present, and reports per-row problems in `errors`. CSV is parsed as text so
  * dates stay exactly as typed; Excel date cells are normalized to ISO.
  */
-export async function parseCardFile(file: File): Promise<ParseResult> {
+export async function parseCardFile(
+  file: File,
+  kind: CardImportKind = "student",
+): Promise<ParseResult> {
   const isCsv =
     file.name.toLowerCase().endsWith(".csv") || file.type === "text/csv";
 
@@ -198,6 +291,12 @@ export async function parseCardFile(file: File): Promise<ParseResult> {
 
   const rows: CardRow[] = [];
   const errors: string[] = [];
+  const isTeacher = kind === "teacher";
+  const defaultType: CardType = isTeacher ? "Teacher" : "Student";
+  // Import upserts by id, so two rows sharing an id silently collapse into
+  // one saved card (the later row wins) — surface that instead of leaving
+  // it to look like rows went missing after import.
+  const firstRowById = new Map<string, number>();
 
   records.forEach((raw, i) => {
     const rowNum = i + 2; // +1 for header, +1 for 1-based
@@ -212,8 +311,8 @@ export async function parseCardFile(file: File): Promise<ParseResult> {
       return "";
     };
 
-    const id = get("id", "card id", "cardid", "student id", "studentid");
-    const name = get("name", "full name", "holder", "student name");
+    const id = get("id", "card id", "cardid", "staff id", "teacher id", "student id", "studentid");
+    const name = get("name", "full name", "holder", "student name", "teacher name");
     if (!id && !name) return; // skip fully blank rows
     if (!id) {
       errors.push(`Row ${rowNum}: missing "id" — skipped.`);
@@ -224,14 +323,29 @@ export async function parseCardFile(file: File): Promise<ParseResult> {
       return;
     }
 
+    const idKey = id.trim().toLowerCase();
+    const firstRow = firstRowById.get(idKey);
+    if (firstRow !== undefined) {
+      errors.push(
+        `Row ${rowNum}: id "${id}" is also used by row ${firstRow} in this file — duplicate ids overwrite each other, only one will be kept.`,
+      );
+    } else {
+      firstRowById.set(idKey, rowNum);
+    }
+
     rows.push({
       id,
       name,
       email: get("email", "e-mail", "mail"),
-      type: normalizeType(get("type")),
-      section: get("section"),
-      grade: get("grade"),
-      dob: get("dob", "date of birth", "birthdate"),
+      type: normalizeType(get("type"), defaultType),
+      section: isTeacher
+        ? get("department", "dept", "section")
+        : get("section"),
+      grade: isTeacher ? get("title", "position", "grade") : get("grade"),
+      dob: isTeacher ? "" : get("dob", "date of birth", "birthdate"),
+      joined: isTeacher
+        ? get("joined", "date joined", "joining date", "date of joining")
+        : undefined,
       image: get("image", "photo", "image url", "photo url", "picture"),
       issued: get("intake", "issued", "intake date", "issue date", "issued on"),
       expires: get("expires", "expiry", "expiration", "expiry date"),

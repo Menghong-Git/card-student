@@ -504,7 +504,8 @@ export default function CreateCardPage() {
       const blob: Blob = await new Promise((res, rej) =>
         canvas.toBlob(
           (b) => (b ? res(b) : rej(new Error("toBlob failed"))),
-          "image/png",
+          "image/jpeg",
+          0.92,
         ),
       );
       const a = document.createElement("a");
@@ -513,7 +514,7 @@ export default function CreateCardPage() {
         slug(fullName || directoryLabel) +
         "-" +
         slug(data.cardholderId || "card") +
-        ".png";
+        ".jpg";
       a.download = fname;
       document.body.appendChild(a);
       a.click();
@@ -950,7 +951,7 @@ export default function CreateCardPage() {
                 className="flex-1"
                 type="button"
               >
-                {downloading ? "Preparing..." : "Download PNG"}
+                {downloading ? "Preparing..." : "Download JPG"}
               </Button>
               <Button
                 variant="secondary"
